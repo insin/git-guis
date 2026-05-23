@@ -1,0 +1,465 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --app-bg: #f1f1f1;
+  --panel-bg: #ffffff;
+  --panel-subtle: #f6f6f6;
+  --editor-bg: #ffffff;
+  --text: #171717;
+  --muted: #686868;
+  --border: #c9c9c9;
+  --border-strong: #9d9d9d;
+  --selection: #2f6feb;
+  --selection-text: #ffffff;
+  --unstaged: #ffb38f;
+  --staged: #93e790;
+  --button: #dedede;
+  --button-hover: #d1d1d1;
+  --button-text: #1b1b1b;
+  --add-bg: #e9f8ec;
+  --add-text: #1d6f34;
+  --del-bg: #fdecec;
+  --del-text: #b42318;
+  --hunk-bg: #fff5c2;
+  --hunk-text: #5c4b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --app-bg: #2f2f2f;
+    --panel-bg: #1f1f1f;
+    --panel-subtle: #272727;
+    --editor-bg: #1d1d1d;
+    --text: #e7e7e7;
+    --muted: #a1a1a1;
+    --border: #575757;
+    --border-strong: #898989;
+    --selection: #3f6791;
+    --selection-text: #ffffff;
+    --button: #777777;
+    --button-hover: #888888;
+    --button-text: #ffffff;
+    --add-bg: #17351f;
+    --add-text: #93e790;
+    --del-bg: #3d1717;
+    --del-text: #ff8f8f;
+    --hunk-bg: #3e3200;
+    --hunk-text: #ffd400;
+  }
+}
+
+:root[data-theme="dark"],
+:root[data-theme="monokai"] {
+  --app-bg: #222222;
+  --panel-bg: #1f1f1f;
+  --panel-subtle: #272727;
+  --editor-bg: #1d1d1d;
+  --text: #e7e7e7;
+  --muted: #a1a1a1;
+  --border: #575757;
+  --border-strong: #898989;
+  --selection: #3f6791;
+  --selection-text: #ffffff;
+  --button: #777777;
+  --button-hover: #888888;
+  --button-text: #ffffff;
+  --add-bg: #17351f;
+  --add-text: #93e790;
+  --del-bg: #3d1717;
+  --del-text: #ff8f8f;
+  --hunk-bg: #3e3200;
+  --hunk-text: #ffd400;
+}
+
+:root[data-theme="monokai"] {
+  --app-bg: #222222;
+  --panel-bg: #1e1f1c;
+  --panel-subtle: #2d2e28;
+  --editor-bg: #1e1f1c;
+  --text: #f8f8f2;
+  --muted: #c6c6bd;
+  --border: #55564d;
+  --border-strong: #75766c;
+  --selection: #49483e;
+  --unstaged: #fd971f;
+  --staged: #a6e22e;
+  --add-bg: #25370d;
+  --add-text: #a6e22e;
+  --del-bg: #3a1622;
+  --del-text: #f92672;
+  --hunk-bg: #403900;
+  --hunk-text: #e6db74;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+select {
+  background: var(--button);
+  border: 1px solid var(--border);
+  color: var(--button-text);
+}
+
+button {
+  border-radius: 4px;
+  cursor: default;
+  padding: 3px 8px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+select {
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+
+.app-shell {
+  @apply h-full overflow-hidden;
+  background: var(--app-bg);
+}
+
+.tab-bar {
+  @apply flex items-center gap-1 px-2;
+  height: 34px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-subtle);
+  -webkit-app-region: drag;
+}
+
+.drag-region {
+  width: 62px;
+  flex: 0 0 auto;
+}
+
+.repo-tab,
+.toolbar-button,
+.tab-bar select {
+  -webkit-app-region: no-drag;
+}
+
+.repo-tab {
+  @apply flex items-center gap-2;
+  max-width: 240px;
+  min-width: 108px;
+  height: 25px;
+  overflow: hidden;
+  background: transparent;
+  border-color: transparent;
+}
+
+.repo-tab.active {
+  background: var(--panel-bg);
+  border-color: var(--border);
+}
+
+.repo-tab span:first-child {
+  @apply truncate;
+}
+
+.tab-branch {
+  @apply text-xs;
+  color: var(--muted);
+}
+
+.tab-close {
+  @apply ml-auto grid h-4 w-4 place-items-center rounded-sm text-xs leading-none;
+  color: var(--muted);
+}
+
+.tab-close:hover {
+  background: var(--button-hover);
+  color: var(--text);
+}
+
+.toolbar-spacer {
+  @apply flex-1;
+}
+
+.repo-view {
+  @apply flex h-[calc(100%-34px)] flex-col;
+}
+
+.branch-strip {
+  @apply flex items-center gap-2 px-2;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-subtle);
+}
+
+.branch-strip span {
+  @apply truncate;
+  color: var(--muted);
+}
+
+.workspace-grid {
+  @apply grid min-h-0 flex-1;
+  grid-template-columns: minmax(250px, 34vw) minmax(520px, 1fr);
+}
+
+.file-column {
+  @apply grid min-h-0;
+  grid-template-rows: minmax(160px, 1fr) 8px minmax(160px, 1fr);
+  border-right: 1px solid var(--border);
+  background: var(--panel-bg);
+}
+
+.splitter {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-subtle);
+}
+
+.file-list {
+  @apply min-h-0 overflow-hidden;
+}
+
+.file-list header {
+  @apply h-6 px-2 text-center font-semibold leading-6;
+  color: #000000;
+}
+
+.file-list header.unstaged {
+  background: var(--unstaged);
+}
+
+.file-list header.staged {
+  background: var(--staged);
+}
+
+.file-list-body {
+  @apply h-[calc(100%-1.5rem)] overflow-auto;
+}
+
+.file-row {
+  @apply flex w-full items-center gap-2 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-left;
+  min-height: 21px;
+  color: var(--text);
+}
+
+.file-row:hover,
+.file-row.selected {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.status-dot {
+  @apply h-2.5 w-2.5 flex-none;
+  border: 1px solid var(--border-strong);
+}
+
+.status-dot.untracked {
+  background: transparent;
+  border-color: var(--muted);
+  opacity: 0.7;
+}
+
+.status-dot.added {
+  background: transparent;
+  border-color: var(--add-text);
+  opacity: 0.75;
+}
+
+.status-dot.deleted {
+  background: var(--del-text);
+}
+
+.status-dot.renamed,
+.status-dot.copied {
+  background: var(--hunk-text);
+}
+
+.status-dot.conflicted {
+  background: #ff2d55;
+}
+
+.empty-list,
+.placeholder {
+  @apply p-3;
+  color: var(--muted);
+}
+
+.right-column {
+  @apply grid min-h-0;
+  grid-template-rows: 28px minmax(0, 1fr) 216px;
+  background: var(--editor-bg);
+  position: relative;
+}
+
+.diff-header {
+  @apply flex items-center justify-between gap-3 px-2;
+  background: #ffd400;
+  color: #000000;
+}
+
+.diff-header span {
+  @apply truncate;
+}
+
+.diff-body {
+  @apply min-h-0 overflow-auto;
+  background: var(--editor-bg);
+}
+
+.classic-diff {
+  @apply m-0 min-h-full p-0;
+  background: var(--editor-bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 17px;
+  user-select: text;
+}
+
+.diff-line {
+  @apply grid whitespace-pre;
+  grid-template-columns: 16px minmax(0, 1fr);
+}
+
+.diff-line > span {
+  @apply min-w-0;
+}
+
+.diff-gutter {
+  @apply select-none text-right;
+  color: var(--muted);
+  padding-right: 8px;
+}
+
+.diff-marker {
+  @apply select-none text-center;
+}
+
+.diff-code {
+  @apply pr-2;
+}
+
+.line-add {
+  background: var(--add-bg);
+  color: var(--add-text);
+}
+
+.line-new-file {
+  background: transparent;
+  color: var(--text);
+}
+
+.line-new-file .diff-marker {
+  color: var(--add-text);
+}
+
+.line-del {
+  background: var(--del-bg);
+  color: var(--del-text);
+}
+
+.line-hunk {
+  background: var(--hunk-bg);
+  color: var(--hunk-text);
+}
+
+.line-file-meta {
+  color: var(--muted);
+}
+
+.selected-line {
+  outline: 1px solid var(--selection);
+  outline-offset: -1px;
+}
+
+.context-menu {
+  @apply fixed z-50 flex min-w-44 flex-col gap-0.5 p-1;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+
+.context-menu button {
+  @apply w-full rounded-sm border-0 bg-transparent px-2 py-1 text-left;
+  color: var(--text);
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.context-menu-note {
+  @apply px-2 py-1 text-xs;
+  color: var(--muted);
+}
+
+.commit-panel {
+  @apply min-h-0 px-2 py-1.5;
+  border-top: 1px solid var(--border);
+  background: var(--panel-subtle);
+}
+
+.commit-toolbar {
+  @apply mb-1.5 flex items-center gap-4;
+}
+
+.commit-toolbar label {
+  @apply ml-auto flex items-center gap-2;
+}
+
+.commit-grid {
+  @apply grid gap-2;
+  height: 178px;
+  grid-template-columns: 112px 1fr;
+}
+
+.commit-grid textarea {
+  @apply h-full resize-none p-2;
+  background: var(--editor-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.commit-grid button {
+  @apply h-7 self-start;
+}
+
+.status-bar {
+  @apply h-5 px-2 leading-5;
+  border-top: 1px solid var(--border);
+  background: var(--panel-subtle);
+  color: var(--muted);
+}
+
+.empty-state {
+  @apply grid h-[calc(100%-34px)] place-items-center;
+}
+
+.primary-button {
+  @apply px-4 py-2;
+}
