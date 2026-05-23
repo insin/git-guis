@@ -34,6 +34,18 @@ export type GitResult<T = void> = {
   error?: string
 }
 
+export type GitDiff =
+  | {
+      kind: 'text'
+      patch: string
+    }
+  | {
+      kind: 'binary'
+      summary: string
+    }
+
+export type ThemeName = 'system' | 'light' | 'dark' | 'monokai'
+
 export type RepoValidation = {
   root: string
   branch: string | null

@@ -1,7 +1,9 @@
+import { File, FileCheck, Plus, X } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Group, Panel, Separator } from 'react-resizable-panels'
 
-import type { FileChange, RepoStatus } from '../../shared/types'
+import type { FileChange, GitDiff, RepoStatus, ThemeName } from '../../shared/types'
 import { formatCommitMessage } from '../utils/commitMessage'
 import {
   buildHunkPatch,
@@ -13,7 +15,6 @@ import {
 } from '../utils/diff'
 import { loadJson, saveJson } from '../utils/storage'
 
-type ThemeName = 'system' | 'light' | 'dark' | 'monokai'
 type DiffMode = 'highlighted' | 'classic'
 type Pane = 'unstaged' | 'staged'
 
@@ -29,7 +30,7 @@ type RepoTab = {
   status: RepoStatus | null
   selectedPane: Pane
   selectedPath: string | null
-  diff: string
+  diff: GitDiff | null
   diffLoading: boolean
   commitDraft: string
   amend: boolean
@@ -40,6 +41,9 @@ type RepoTab = {
 const TABS_KEY = 'git-guis.tabs'
 const PREFS_KEY = 'git-guis.preferences'
 const DRAFT_KEY = 'git-guis.drafts'
+const WORKSPACE_LAYOUT_KEY = 'git-guis.layout.workspace'
+const FILE_LIST_LAYOUT_KEY = 'git-guis.layout.file-list'
+const RIGHT_PANE_LAYOUT_KEY = 'git-guis.layout.right-pane'
 
 const defaultPrefs: Preferences = {
   theme: 'system',
@@ -55,7 +59,14 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = prefs.theme
     saveJson(PREFS_KEY, prefs)
+    window.appApi.setTheme(prefs.theme)
   }, [prefs])
+
+  useEffect(() => {
+    return window.appApi.onThemeSelected((theme) => {
+      setPrefs((current) => ({ ...current, theme }))
+    })
+  }, [])
 
   useEffect(() => {
     saveJson(
@@ -103,8 +114,7 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [activeTab?.id])
 
-  const openRepository = async () => {
-    const selectedPath = await window.gitApi.openRepository()
+  const openRepositoryPath = async (selectedPath: string) => {
     if (!selectedPath) return
 
     const validation = await window.gitApi.validateRepository(selectedPath)
@@ -114,33 +124,48 @@ export function App() {
     }
 
     const root = validation.data.root
-    const existing = tabs.find((tab) => tab.path === root)
-    if (existing) {
-      setActiveTabId(existing.id)
-      return
-    }
+    let activeId: string | null = null
+    let refreshId: string | null = null
+    setTabs((current) => {
+      const existing = current.find((tab) => tab.path === root)
+      if (existing) {
+        activeId = existing.id
+        return current
+      }
 
-    const tab = createTab(root)
-    setTabs((current) => [...current, tab])
-    setActiveTabId(tab.id)
-    void refreshTab(tab.id, root)
+      const tab = createTab(root)
+      activeId = tab.id
+      refreshId = tab.id
+      return [...current, tab]
+    })
+
+    if (activeId) setActiveTabId(activeId)
+    if (refreshId) void refreshTab(refreshId, root)
   }
 
-  const openWorktrees = async () => {
-    if (!activeTab) return
-    const result = await window.gitApi.listWorktrees(activeTab.path)
-    if (!result.ok || !result.data) {
-      showMessage(activeTab.id, result.error ?? 'Unable to list worktrees.')
-      return
-    }
-
-    const newTabs = result.data
-      .filter((worktree) => !worktree.bare && !tabs.some((tab) => tab.path === worktree.path))
-      .map((worktree) => createTab(worktree.path))
-
-    setTabs((current) => [...current, ...newTabs])
-    for (const tab of newTabs) void refreshTab(tab.id, tab.path)
+  const openRepository = async () => {
+    const selectedPath = await window.gitApi.openRepository()
+    if (selectedPath) await openRepositoryPath(selectedPath)
   }
+
+  useEffect(() => {
+    return window.appApi.onOpenRepository(() => {
+      void openRepository()
+    })
+  }, [openRepository])
+
+  useEffect(() => {
+    const unsubscribe = window.appApi.onOpenRepositoryPath((repoPath) => {
+      void openRepositoryPath(repoPath)
+    })
+    return unsubscribe
+  }, [openRepositoryPath])
+
+  useEffect(() => {
+    void window.appApi.getLaunchRepositories().then((repoPaths) => {
+      for (const repoPath of repoPaths) void openRepositoryPath(repoPath)
+    })
+  }, [])
 
   const closeTab = (tabId: string) => {
     setTabs((current) => {
@@ -209,7 +234,7 @@ export function App() {
         tab.id === tabId
           ? {
               ...tab,
-              diff: result.data ?? '',
+              diff: result.data ?? null,
               diffLoading: false,
               message: result.ok ? 'Ready.' : (result.error ?? 'Unable to load diff.'),
             }
@@ -255,7 +280,8 @@ export function App() {
   }
 
   const applyHunk = async (tab: RepoTab, hunkIndex: number) => {
-    const patch = buildHunkPatch(tab.diff, hunkIndex)
+    if (tab.diff?.kind !== 'text') return
+    const patch = buildHunkPatch(tab.diff.patch, hunkIndex)
     if (!patch) return
     const result = await window.gitApi.applyPatch(tab.path, patch, tab.selectedPane === 'staged')
     if (!result.ok) {
@@ -266,7 +292,8 @@ export function App() {
   }
 
   const applySelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
-    const patch = buildSelectionPatch(tab.diff, selection ?? tab.selectedLines)
+    if (tab.diff?.kind !== 'text') return
+    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
     if (!patch) {
       showMessage(tab.id, 'Select changed lines before applying a partial patch.')
       return
@@ -338,7 +365,7 @@ export function App() {
               title={tab.path}
               type="button"
             >
-              <span>{tab.displayName}</span>
+              <span className="tab-title">{tab.displayName}</span>
               <span className="tab-branch">{tab.status?.branch ?? 'detached'}</span>
             </button>
             <button
@@ -350,32 +377,22 @@ export function App() {
               title={`Close ${tab.displayName}`}
               type="button"
             >
-              x
+              <X aria-hidden size={13} strokeWidth={2.25} />
             </button>
           </div>
         ))}
-        <button className="toolbar-button" onClick={openRepository} type="button">
-          Open
-        </button>
         <button
-          className="toolbar-button"
-          onClick={openWorktrees}
-          disabled={!activeTab}
+          aria-label="Open repository"
+          className="tab-add"
+          onClick={openRepository}
+          title="Open repository"
           type="button"
         >
-          Worktrees
+          <Plus aria-hidden size={20} strokeWidth={2.1} />
         </button>
         <div className="toolbar-spacer" />
         <select
-          value={prefs.theme}
-          onChange={(event) => setPrefs({ ...prefs, theme: event.target.value as ThemeName })}
-        >
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="monokai">Monokai Extended</option>
-        </select>
-        <select
+          className="hidden"
           value={prefs.diffMode}
           onChange={(event) => setPrefs({ ...prefs, diffMode: event.target.value as DiffMode })}
         >
@@ -460,125 +477,198 @@ function RepositoryView({
   onAmendChange,
   onLoadAmendMessage,
 }: RepositoryViewProps) {
-  const hunks = useMemo(() => parseUnifiedDiff(tab.diff).hunks, [tab.diff])
+  const hunks = useMemo(
+    () => (tab.diff?.kind === 'text' ? parseUnifiedDiff(tab.diff.patch).hunks : []),
+    [tab.diff],
+  )
   const diffTitle = tab.selectedPane === 'staged' ? 'Staged for commit' : 'Modified, not staged'
   const [contextMenu, setContextMenu] = useState<DiffContextMenu>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const closeMenu = () => setContextMenu(null)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+
+    window.addEventListener('pointerdown', closeMenu)
+    window.addEventListener('blur', closeMenu)
+    window.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      window.removeEventListener('pointerdown', closeMenu)
+      window.removeEventListener('blur', closeMenu)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [contextMenu])
+
+  const runMenuAction = (action: () => void) => {
+    setContextMenu(null)
+    action()
+  }
 
   return (
     <section className="repo-view">
       <div className="branch-strip">
         <strong>Current Branch:</strong> {tab.status?.branch ?? 'detached'} <span>{tab.path}</span>
       </div>
-      <div className="workspace-grid">
-        <aside className="file-column">
-          <FileList
-            title="Unstaged Changes"
-            tone="unstaged"
-            changes={tab.status?.unstaged ?? []}
-            selectedPath={tab.selectedPane === 'unstaged' ? tab.selectedPath : null}
-            onSelect={(change) => onSelect('unstaged', change)}
-          />
-          <div className="splitter" />
-          <FileList
-            title="Staged Changes (Will Commit)"
-            tone="staged"
-            changes={tab.status?.staged ?? []}
-            selectedPath={tab.selectedPane === 'staged' ? tab.selectedPath : null}
-            onSelect={(change) => onSelect('staged', change)}
-          />
-        </aside>
-
-        <section className="right-column">
-          <div className="diff-header">
-            <strong>{diffTitle}</strong>
-            <span>{tab.selectedPath ? `File: ${tab.selectedPath}` : 'No file selected'}</span>
-          </div>
-
-          <div className="diff-body">
-            {tab.diffLoading ? (
-              <div className="placeholder">Loading diff...</div>
-            ) : tab.diff ? (
-              <DiffView
-                patch={tab.diff}
-                highlighted={prefs.diffMode === 'highlighted'}
-                selectedLines={tab.selectedLines}
-                onSelectionChange={onSelectedLines}
-                onContextMenu={(event, hunkIndex, selection) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setContextMenu({ x: event.clientX, y: event.clientY, hunkIndex, selection })
-                }}
+      <Group
+        className="workspace-panels"
+        defaultLayout={loadJson(WORKSPACE_LAYOUT_KEY, { files: 34, detail: 66 })}
+        id="workspace-panels"
+        onLayoutChanged={(layout) => saveJson(WORKSPACE_LAYOUT_KEY, layout)}
+        orientation="horizontal"
+      >
+        <Panel className="file-column" defaultSize="34%" id="files" minSize={250}>
+          <Group
+            className="file-list-panels"
+            defaultLayout={loadJson(FILE_LIST_LAYOUT_KEY, { unstaged: 56, staged: 44 })}
+            id="file-list-panels"
+            onLayoutChanged={(layout) => saveJson(FILE_LIST_LAYOUT_KEY, layout)}
+            orientation="vertical"
+          >
+            <Panel className="file-list-panel" defaultSize="56%" id="unstaged" minSize={120}>
+              <FileList
+                title="Unstaged Changes"
+                tone="unstaged"
+                changes={tab.status?.unstaged ?? []}
+                selectedPath={tab.selectedPane === 'unstaged' ? tab.selectedPath : null}
+                onSelect={(change) => onSelect('unstaged', change)}
               />
-            ) : (
-              <div className="placeholder">Select a file to review changes.</div>
-            )}
-          </div>
+            </Panel>
+            <Separator className="resize-handle resize-handle-vertical" id="file-list-separator" />
+            <Panel className="file-list-panel" defaultSize="44%" id="staged" minSize={100}>
+              <FileList
+                title="Staged Changes (Will Commit)"
+                tone="staged"
+                changes={tab.status?.staged ?? []}
+                selectedPath={tab.selectedPane === 'staged' ? tab.selectedPath : null}
+                onSelect={(change) => onSelect('staged', change)}
+              />
+            </Panel>
+          </Group>
+        </Panel>
 
-          {contextMenu && (
-            <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-              <button
-                disabled={!contextMenu.selection}
-                onClick={() => onApplySelection(contextMenu.selection)}
-                type="button"
-              >
-                {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
-              </button>
-              <button
-                disabled={contextMenu.hunkIndex === null}
-                onClick={() => contextMenu.hunkIndex !== null && onApplyHunk(contextMenu.hunkIndex)}
-                type="button"
-              >
-                {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Hunk
-              </button>
-              <button disabled={!tab.selectedPath} onClick={onToggleStage} type="button">
-                {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} File
-              </button>
-              <button
-                disabled={tab.selectedPane !== 'unstaged' || !tab.selectedPath}
-                onClick={onRevert}
-                type="button"
-              >
-                Revert File
-              </button>
-              <button onClick={onRefresh} type="button">
-                Refresh
-              </button>
-              {hunks.length > 1 && (
-                <div className="context-menu-note">{hunks.length} hunks in file</div>
+        <Separator className="resize-handle resize-handle-horizontal" id="workspace-separator" />
+
+        <Panel className="right-column" defaultSize="66%" id="detail" minSize={520}>
+          <Group
+            className="right-pane-panels"
+            defaultLayout={loadJson(RIGHT_PANE_LAYOUT_KEY, { diff: 76, commit: 24 })}
+            id="right-pane-panels"
+            onLayoutChanged={(layout) => saveJson(RIGHT_PANE_LAYOUT_KEY, layout)}
+            orientation="vertical"
+          >
+            <Panel className="diff-panel" defaultSize="76%" id="diff" minSize={160}>
+              <div className="diff-header">
+                <strong>{diffTitle}</strong>
+                <span>{tab.selectedPath ? `File: ${tab.selectedPath}` : 'No file selected'}</span>
+              </div>
+
+              <div className="diff-body">
+                {tab.diffLoading ? (
+                  <div className="placeholder">Loading diff...</div>
+                ) : tab.diff?.kind === 'text' ? (
+                  <DiffView
+                    patch={tab.diff.patch}
+                    highlighted={prefs.diffMode === 'highlighted'}
+                    selectedLines={tab.selectedLines}
+                    onSelectionChange={onSelectedLines}
+                    onContextMenu={(event, hunkIndex, selection) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setContextMenu({ x: event.clientX, y: event.clientY, hunkIndex, selection })
+                    }}
+                  />
+                ) : tab.diff?.kind === 'binary' ? (
+                  <BinaryDiff summary={tab.diff.summary} />
+                ) : (
+                  <div className="placeholder">Select a file to review changes.</div>
+                )}
+              </div>
+
+              {contextMenu && (
+                <div
+                  className="context-menu"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                  <button
+                    disabled={!contextMenu.selection}
+                    onClick={() => runMenuAction(() => onApplySelection(contextMenu.selection))}
+                    type="button"
+                  >
+                    {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
+                  </button>
+                  <button
+                    disabled={contextMenu.hunkIndex === null}
+                    onClick={() =>
+                      runMenuAction(() => {
+                        if (contextMenu.hunkIndex !== null) onApplyHunk(contextMenu.hunkIndex)
+                      })
+                    }
+                    type="button"
+                  >
+                    {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Hunk
+                  </button>
+                  <button
+                    disabled={!tab.selectedPath}
+                    onClick={() => runMenuAction(onToggleStage)}
+                    type="button"
+                  >
+                    {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} File
+                  </button>
+                  <button
+                    disabled={tab.selectedPane !== 'unstaged' || !tab.selectedPath}
+                    onClick={() => runMenuAction(onRevert)}
+                    type="button"
+                  >
+                    Revert File
+                  </button>
+                  <button onClick={() => runMenuAction(onRefresh)} type="button">
+                    Refresh
+                  </button>
+                  {hunks.length > 1 && (
+                    <div className="context-menu-note">{hunks.length} hunks in file</div>
+                  )}
+                </div>
               )}
-            </div>
-          )}
+            </Panel>
 
-          <footer className="commit-panel">
-            <div className="commit-toolbar">
-              <span>Commit Message:</span>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={tab.amend}
-                  onChange={(event) => onAmendChange(event.target.checked)}
-                />
-                Amend Last Commit
-              </label>
-              {tab.amend && (
-                <button onClick={onLoadAmendMessage} type="button">
-                  Load last message
+            <Separator className="resize-handle resize-handle-vertical" id="right-pane-separator" />
+
+            <Panel className="commit-panel" defaultSize="24%" id="commit" minSize={140}>
+              <div className="commit-toolbar">
+                <span>Commit Message:</span>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={tab.amend}
+                    onChange={(event) => onAmendChange(event.target.checked)}
+                  />
+                  Amend Last Commit
+                </label>
+                {tab.amend && (
+                  <button onClick={onLoadAmendMessage} type="button">
+                    Load last message
+                  </button>
+                )}
+              </div>
+              <div className="commit-grid">
+                <button onClick={onCommit} type="button">
+                  Commit
                 </button>
-              )}
-            </div>
-            <div className="commit-grid">
-              <button onClick={onCommit} type="button">
-                Commit
-              </button>
-              <textarea
-                value={tab.commitDraft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                spellCheck
-              />
-            </div>
-          </footer>
-        </section>
-      </div>
+                <textarea
+                  value={tab.commitDraft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  spellCheck
+                />
+              </div>
+            </Panel>
+          </Group>
+        </Panel>
+      </Group>
       <div className="status-bar">{tab.message}</div>
     </section>
   )
@@ -608,7 +698,7 @@ function FileList({ title, tone, changes, selectedPath, onSelect }: FileListProp
               title={change.path}
               type="button"
             >
-              <span className={`status-dot ${change.kind}`} />
+              <FileStatusIcon change={change} pane={tone} />
               <span>{change.path}</span>
             </button>
           ))
@@ -616,6 +706,24 @@ function FileList({ title, tone, changes, selectedPath, onSelect }: FileListProp
       </div>
     </section>
   )
+}
+
+function FileStatusIcon({ change, pane }: { change: FileChange; pane: Pane }) {
+  const className = `file-icon ${fileIconClass(change, pane)}`
+  if (pane === 'staged' && change.kind === 'modified') {
+    return <FileCheck aria-hidden className={className} size={14} strokeWidth={2} />
+  }
+
+  return <File aria-hidden className={className} size={14} strokeWidth={2} />
+}
+
+function fileIconClass(change: FileChange, pane: Pane) {
+  if (change.kind === 'added' || change.kind === 'untracked') return 'new'
+  if (pane === 'staged') return 'staged'
+  if (change.kind === 'deleted') return 'deleted'
+  if (change.kind === 'renamed' || change.kind === 'copied') return 'renamed'
+  if (change.kind === 'conflicted') return 'conflicted'
+  return 'modified'
 }
 
 type DiffViewProps = {
@@ -678,6 +786,15 @@ function DiffView({
         }),
       ])}
     </pre>
+  )
+}
+
+function BinaryDiff({ summary }: { summary: string }) {
+  return (
+    <div className="binary-diff">
+      <div>* {summary}</div>
+      <div>* Binary file (not showing content).</div>
+    </div>
   )
 }
 
@@ -791,7 +908,7 @@ function createTab(repoPath: string): RepoTab {
     status: null,
     selectedPane: 'unstaged',
     selectedPath: null,
-    diff: '',
+    diff: null,
     diffLoading: false,
     commitDraft: loadDraft(repoPath),
     amend: false,

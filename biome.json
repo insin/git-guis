@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!dist", "!dist-electron", "!node_modules"],
+    "includes": ["**", "!dist", "!dist-electron", "!node_modules", "!out"],
     "ignoreUnknown": false
   },
   "formatter": {

@@ -5,16 +5,134 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
+  type MenuItemConstructorOptions,
   nativeTheme,
   type OpenDialogOptions,
   shell,
 } from 'electron'
 
+import type { ThemeName } from '../src/shared/types.js'
 import { GitService } from './services/gitService.js'
 
 const git = new GitService()
 
 let mainWindow: BrowserWindow | null = null
+let currentTheme: ThemeName = 'system'
+const pendingRepositoryPaths = new Set<string>()
+
+const themeLabels: Record<ThemeName, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+  monokai: 'Monokai Extended',
+}
+
+function setTheme(theme: ThemeName, notifyRenderer = false) {
+  currentTheme = theme
+  nativeTheme.themeSource = theme === 'monokai' ? 'dark' : theme
+  buildApplicationMenu()
+  if (notifyRenderer) mainWindow?.webContents.send('app:themeSelected', theme)
+}
+
+function themeMenuItems(): MenuItemConstructorOptions[] {
+  return (Object.keys(themeLabels) as ThemeName[]).map((theme) => ({
+    type: 'radio',
+    label: themeLabels[theme],
+    checked: currentTheme === theme,
+    click: () => setTheme(theme, true),
+  }))
+}
+
+function buildApplicationMenu() {
+  const isMac = process.platform === 'darwin'
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              { label: 'Theme', submenu: themeMenuItems() },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          } satisfies MenuItemConstructorOptions,
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Repository...',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow?.webContents.send('app:openRepository'),
+        },
+        ...(!isMac
+          ? ([{ type: 'separator' }, { role: 'quit' }] as MenuItemConstructorOptions[])
+          : []),
+      ],
+    },
+    { role: 'editMenu' },
+    {
+      label: 'View',
+      submenu: [
+        ...(!isMac
+          ? ([
+              { label: 'Theme', submenu: themeMenuItems() },
+              { type: 'separator' },
+            ] as MenuItemConstructorOptions[])
+          : []),
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+      ],
+    },
+    { role: 'windowMenu' },
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function repoPathsFromArgv(argv: string[]) {
+  const repoPaths: string[] = []
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if ((arg === '--repo' || arg === '--repository') && argv[index + 1]) {
+      repoPaths.push(path.resolve(argv[index + 1]))
+      index += 1
+    }
+  }
+  return repoPaths
+}
+
+function focusMainWindow() {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function openRepositoryPath(repoPath: string) {
+  const normalizedPath = path.resolve(repoPath)
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send('app:openRepositoryPath', normalizedPath)
+    focusMainWindow()
+    return
+  }
+  pendingRepositoryPaths.add(normalizedPath)
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -39,16 +157,41 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow()
+for (const repoPath of repoPathsFromArgv(process.argv)) {
+  pendingRepositoryPaths.add(repoPath)
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    for (const repoPath of repoPathsFromArgv(argv)) {
+      openRepositoryPath(repoPath)
+    }
+    focusMainWindow()
   })
-})
+
+  app.whenReady().then(() => {
+    buildApplicationMenu()
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+ipcMain.on('app:setTheme', (_event, theme: ThemeName) => setTheme(theme))
+
+ipcMain.handle('app:getLaunchRepositories', () => {
+  const repoPaths = [...pendingRepositoryPaths]
+  pendingRepositoryPaths.clear()
+  return repoPaths
 })
 
 ipcMain.handle('dialog:openRepository', async () => {

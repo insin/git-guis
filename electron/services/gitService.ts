@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import type {
   FileChange,
+  GitDiff,
   GitResult,
   RepoStatus,
   RepoValidation,
@@ -65,7 +66,7 @@ export class GitService {
     }
   }
 
-  async getDiff(repoPath: string, filePath: string, staged: boolean): Promise<GitResult<string>> {
+  async getDiff(repoPath: string, filePath: string, staged: boolean): Promise<GitResult<GitDiff>> {
     try {
       const args = staged
         ? ['diff', '--cached', '--no-ext-diff', '--', filePath]
@@ -73,7 +74,15 @@ export class GitService {
       const result = await this.git(repoPath, args, { allowFailure: true })
       if (result.code !== 0) return { ok: false, error: result.stderr || 'Unable to read diff.' }
 
-      if (result.stdout.trim().length > 0 || staged) return { ok: true, data: result.stdout }
+      if (isBinaryDiff(result.stdout)) {
+        return {
+          ok: true,
+          data: { kind: 'binary', summary: await describeBinaryFile(repoPath, filePath) },
+        }
+      }
+
+      if (result.stdout.trim().length > 0 || staged)
+        return { ok: true, data: { kind: 'text', patch: result.stdout } }
 
       const status = await this.getStatus(repoPath)
       const file = status.data?.unstaged.find((change) => change.path === filePath)
@@ -81,7 +90,7 @@ export class GitService {
         return this.getUntrackedDiff(repoPath, filePath)
       }
 
-      return { ok: true, data: result.stdout }
+      return { ok: true, data: { kind: 'text', patch: result.stdout } }
     } catch (error) {
       return failure(error)
     }
@@ -156,10 +165,18 @@ export class GitService {
     }
   }
 
-  private async getUntrackedDiff(repoPath: string, filePath: string): Promise<GitResult<string>> {
+  private async getUntrackedDiff(repoPath: string, filePath: string): Promise<GitResult<GitDiff>> {
     try {
       const absolutePath = path.join(repoPath, filePath)
-      const file = fs.readFileSync(absolutePath, 'utf8')
+      const buffer = fs.readFileSync(absolutePath)
+      if (isBinaryBuffer(buffer)) {
+        return {
+          ok: true,
+          data: { kind: 'binary', summary: await describeBinaryFile(repoPath, filePath) },
+        }
+      }
+
+      const file = buffer.toString('utf8')
       const lines =
         file.length === 0
           ? []
@@ -169,26 +186,23 @@ export class GitService {
       const safePath = quotePath(filePath)
       return {
         ok: true,
-        data: [
-          `diff --git a/${safePath} b/${safePath}`,
-          'new file mode 100644',
-          'index 0000000..0000000',
-          '--- /dev/null',
-          `+++ b/${safePath}`,
-          `@@ -0,0 +1,${lines.length} @@`,
-          ...lines.map((line) => `+${line}`),
-        ].join('\n'),
+        data: {
+          kind: 'text',
+          patch: [
+            `diff --git a/${safePath} b/${safePath}`,
+            'new file mode 100644',
+            'index 0000000..0000000',
+            '--- /dev/null',
+            `+++ b/${safePath}`,
+            `@@ -0,0 +1,${lines.length} @@`,
+            ...lines.map((line) => `+${line}`),
+          ].join('\n'),
+        },
       }
     } catch {
       return {
         ok: true,
-        data: [
-          `diff --git a/${quotePath(filePath)} b/${quotePath(filePath)}`,
-          'new file mode 100644',
-          '--- /dev/null',
-          `+++ b/${quotePath(filePath)}`,
-          'Binary files /dev/null and binary differ',
-        ].join('\n'),
+        data: { kind: 'binary', summary: await describeBinaryFile(repoPath, filePath) },
       }
     }
   }
@@ -389,6 +403,88 @@ function parseWorktrees(stdout: string): WorktreeInfo[] {
 
 function quotePath(filePath: string) {
   return filePath.replaceAll('\\', '\\\\').replaceAll('\n', '\\n')
+}
+
+function isBinaryDiff(diff: string) {
+  return /^Binary files .+ differ$/m.test(diff) || /^GIT binary patch$/m.test(diff)
+}
+
+function isBinaryBuffer(buffer: Buffer) {
+  if (buffer.includes(0)) return true
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8000))
+  if (sample.length === 0) return false
+
+  let suspicious = 0
+  for (const byte of sample) {
+    if (byte === 9 || byte === 10 || byte === 13) continue
+    if (byte >= 32 && byte <= 126) continue
+    suspicious += 1
+  }
+
+  return suspicious / sample.length > 0.3
+}
+
+async function describeBinaryFile(repoPath: string, filePath: string) {
+  const absolutePath = path.join(repoPath, filePath)
+  const fileResult = await runFileCommand(absolutePath)
+  if (fileResult) return fileResult
+
+  try {
+    const buffer = fs.readFileSync(absolutePath)
+    return describeFromMagicBytes(buffer)
+  } catch {
+    return 'Binary file'
+  }
+}
+
+function runFileCommand(filePath: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn('file', ['-b', filePath], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+
+    let stdout = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk
+    })
+    child.on('error', () => resolve(null))
+    child.on('close', (code) => {
+      const summary = stdout.trim()
+      resolve(code === 0 && summary ? summary : null)
+    })
+  })
+}
+
+function describeFromMagicBytes(buffer: Buffer) {
+  if (isPng(buffer)) {
+    const width = buffer.readUInt32BE(16)
+    const height = buffer.readUInt32BE(20)
+    const bitDepth = buffer[24]
+    const colorType = pngColorType(buffer[25])
+    return `PNG image data, ${width} x ${height}, ${bitDepth}-bit/color ${colorType}`
+  }
+
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'JPEG image data'
+  if (buffer.subarray(0, 6).toString('ascii') === 'GIF87a') return 'GIF image data'
+  if (buffer.subarray(0, 6).toString('ascii') === 'GIF89a') return 'GIF image data'
+  if (buffer.subarray(0, 4).toString('ascii') === '%PDF') return 'PDF document'
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) return 'Zip archive data'
+
+  return 'Binary file'
+}
+
+function isPng(buffer: Buffer) {
+  return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+}
+
+function pngColorType(colorType: number | undefined) {
+  if (colorType === 0) return 'grayscale'
+  if (colorType === 2) return 'RGB'
+  if (colorType === 3) return 'colormap'
+  if (colorType === 4) return 'grayscale+alpha'
+  if (colorType === 6) return 'RGBA'
+  return 'PNG'
 }
 
 function failure(error: unknown): GitResult<never> {

@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+
+const { spawn, spawnSync } = require('node:child_process')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const appName = process.env.GIT_GUIS_APP_NAME || 'Git Guis'
+const targetPath = path.resolve(process.argv[2] || process.cwd())
+
+function gitRoot(cwd) {
+  const result = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
+    encoding: 'utf8',
+  })
+  if (result.status !== 0) return null
+  return result.stdout.trim()
+}
+
+function macAppPath() {
+  if (process.env.GIT_GUIS_APP) return process.env.GIT_GUIS_APP
+
+  const candidates = [
+    '/Applications/Git Guis.app',
+    path.join(os.homedir(), 'Applications', 'Git Guis.app'),
+    path.resolve(__dirname, '..', 'out', 'Git Guis-darwin-arm64', 'Git Guis.app'),
+  ]
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
+}
+
+function openMac(repoPath) {
+  const appPath = macAppPath()
+  const args = appPath
+    ? ['-n', appPath, '--args', '--repo', repoPath]
+    : ['-na', appName, '--args', '--repo', repoPath]
+
+  const child = spawn('open', args, {
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+}
+
+const repoPath = gitRoot(targetPath)
+if (!repoPath) {
+  console.error(`ggs: ${targetPath} is not inside a Git repository`)
+  process.exit(1)
+}
+
+if (process.platform !== 'darwin') {
+  console.error('ggs: only macOS launch is wired up right now')
+  process.exit(1)
+}
+
+openMac(repoPath)

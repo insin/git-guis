@@ -161,42 +161,80 @@ select {
 }
 
 .repo-tab,
-.toolbar-button,
+.tab-add,
 .tab-bar select {
   -webkit-app-region: no-drag;
 }
 
 .repo-tab {
-  @apply flex items-center gap-2;
-  max-width: 240px;
+  @apply flex items-center;
+  align-self: flex-end;
+  max-width: 260px;
   min-width: 108px;
-  height: 25px;
+  height: 30px;
+  margin-bottom: -1px;
   overflow: hidden;
   background: transparent;
-  border-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted);
+}
+
+.repo-tab:hover {
+  background: color-mix(in srgb, var(--button) 24%, transparent);
+  color: var(--text);
 }
 
 .repo-tab.active {
-  background: var(--panel-bg);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--button) 46%, var(--panel-bg));
+  color: var(--text);
 }
 
-.repo-tab span:first-child {
+.tab-main {
+  @apply flex min-w-0 flex-1 items-center gap-1 border-0 bg-transparent py-0 pl-2 pr-1 text-left;
+  height: 100%;
+  color: inherit;
+}
+
+.repo-tab .tab-main:hover:not(:disabled) {
+  background: transparent;
+}
+
+.tab-title {
   @apply truncate;
+  min-width: 0;
 }
 
 .tab-branch {
-  @apply text-xs;
+  @apply min-w-0 flex-none truncate text-xs;
+  max-width: 72px;
   color: var(--muted);
 }
 
 .tab-close {
-  @apply ml-auto grid h-4 w-4 place-items-center rounded-sm text-xs leading-none;
-  color: var(--muted);
+  @apply inline-flex flex-none items-center justify-center border-0 bg-transparent leading-none;
+  margin-right: 5px;
+  padding: 3px;
+  border-radius: 3px;
+  color: inherit;
+  opacity: 0.72;
 }
 
 .tab-close:hover {
-  background: var(--button-hover);
+  background: color-mix(in srgb, var(--button-hover) 78%, var(--text) 8%);
+  color: var(--text);
+  opacity: 1;
+}
+
+.tab-add {
+  @apply inline-flex flex-none items-center justify-center border-0 bg-transparent p-0.5;
+  align-self: center;
+  border-radius: 5px;
+  color: var(--muted);
+}
+
+.tab-add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--button) 24%, transparent);
   color: var(--text);
 }
 
@@ -220,22 +258,57 @@ select {
   color: var(--muted);
 }
 
-.workspace-grid {
-  @apply grid min-h-0 flex-1;
-  grid-template-columns: minmax(250px, 34vw) minmax(520px, 1fr);
+.workspace-panels {
+  @apply min-h-0 flex-1;
 }
 
-.file-column {
-  @apply grid min-h-0;
-  grid-template-rows: minmax(160px, 1fr) 8px minmax(160px, 1fr);
-  border-right: 1px solid var(--border);
+.file-column,
+.right-column,
+.file-list-panel,
+.diff-panel,
+.commit-panel {
+  @apply min-h-0 overflow-hidden;
+}
+
+.file-column,
+.right-column {
   background: var(--panel-bg);
 }
 
-.splitter {
+.file-list-panels,
+.right-pane-panels {
+  @apply h-full min-h-0;
+}
+
+.resize-handle {
+  @apply flex-none;
+  background: var(--panel-subtle);
+  position: relative;
+}
+
+.resize-handle-horizontal {
+  width: 5px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+}
+
+.resize-handle-vertical {
+  height: 5px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: var(--panel-subtle);
+  cursor: row-resize;
+}
+
+.resize-handle:hover,
+.resize-handle[data-separator="active"],
+.resize-handle[data-separator="focus"] {
+  background: var(--border-strong);
+}
+
+.resize-handle:focus-visible {
+  outline: 1px solid var(--selection);
+  outline-offset: -1px;
 }
 
 .file-list {
@@ -260,8 +333,8 @@ select {
 }
 
 .file-row {
-  @apply flex w-full items-center gap-2 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-left;
-  min-height: 21px;
+  @apply flex w-full items-center gap-1.5 truncate rounded-none border-0 bg-transparent px-2 py-0 text-left;
+  min-height: 18px;
   color: var(--text);
 }
 
@@ -271,34 +344,33 @@ select {
   color: var(--selection-text);
 }
 
-.status-dot {
-  @apply h-2.5 w-2.5 flex-none;
-  border: 1px solid var(--border-strong);
+.file-icon {
+  @apply flex-none;
 }
 
-.status-dot.untracked {
-  background: transparent;
-  border-color: var(--muted);
-  opacity: 0.7;
+.file-icon.modified {
+  color: #4b9dff;
 }
 
-.status-dot.added {
-  background: transparent;
-  border-color: var(--add-text);
-  opacity: 0.75;
+.file-icon.staged {
+  color: var(--add-text);
 }
 
-.status-dot.deleted {
-  background: var(--del-text);
+.file-icon.new {
+  color: var(--muted);
+  opacity: 0.72;
 }
 
-.status-dot.renamed,
-.status-dot.copied {
-  background: var(--hunk-text);
+.file-icon.deleted {
+  color: var(--del-text);
 }
 
-.status-dot.conflicted {
-  background: #ff2d55;
+.file-icon.renamed {
+  color: var(--hunk-text);
+}
+
+.file-icon.conflicted {
+  color: #ff2d55;
 }
 
 .empty-list,
@@ -308,14 +380,18 @@ select {
 }
 
 .right-column {
-  @apply grid min-h-0;
-  grid-template-rows: 28px minmax(0, 1fr) 216px;
   background: var(--editor-bg);
   position: relative;
 }
 
+.diff-panel {
+  @apply grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+  background: var(--editor-bg);
+}
+
 .diff-header {
-  @apply flex items-center justify-between gap-3 px-2;
+  @apply flex items-center justify-between gap-3 h-6 px-2;
   background: #ffd400;
   color: #000000;
 }
@@ -337,6 +413,14 @@ select {
   font-size: 12px;
   line-height: 17px;
   user-select: text;
+}
+
+.binary-diff {
+  @apply p-3;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .diff-line {
@@ -390,11 +474,6 @@ select {
   color: var(--muted);
 }
 
-.selected-line {
-  outline: 1px solid var(--selection);
-  outline-offset: -1px;
-}
-
 .context-menu {
   @apply fixed z-50 flex min-w-44 flex-col gap-0.5 p-1;
   background: var(--panel-bg);
@@ -418,13 +497,12 @@ select {
 }
 
 .commit-panel {
-  @apply min-h-0 px-2 py-1.5;
-  border-top: 1px solid var(--border);
+  @apply flex flex-col px-2 py-1.5;
   background: var(--panel-subtle);
 }
 
 .commit-toolbar {
-  @apply mb-1.5 flex items-center gap-4;
+  @apply mb-1.5 flex flex-none items-center gap-4;
 }
 
 .commit-toolbar label {
@@ -432,13 +510,12 @@ select {
 }
 
 .commit-grid {
-  @apply grid gap-2;
-  height: 178px;
+  @apply grid min-h-0 flex-1 gap-2;
   grid-template-columns: 112px 1fr;
 }
 
 .commit-grid textarea {
-  @apply h-full resize-none p-2;
+  @apply h-full min-h-0 resize-none p-2;
   background: var(--editor-bg);
   border: 1px solid var(--border);
   color: var(--text);

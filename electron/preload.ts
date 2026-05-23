@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { GitApi } from '../src/shared/api.js'
+import type { AppApi, GitApi } from '../src/shared/api.js'
+import type { ThemeName } from '../src/shared/types.js'
 
 const gitApi: GitApi = {
   openRepository: () => ipcRenderer.invoke('dialog:openRepository'),
@@ -19,4 +20,25 @@ const gitApi: GitApi = {
   listWorktrees: (repoPath) => ipcRenderer.invoke('git:listWorktrees', repoPath),
 }
 
+const appApi: AppApi = {
+  setTheme: (theme) => ipcRenderer.send('app:setTheme', theme),
+  getLaunchRepositories: () => ipcRenderer.invoke('app:getLaunchRepositories'),
+  onThemeSelected: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: ThemeName) => callback(theme)
+    ipcRenderer.on('app:themeSelected', listener)
+    return () => ipcRenderer.removeListener('app:themeSelected', listener)
+  },
+  onOpenRepository: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('app:openRepository', listener)
+    return () => ipcRenderer.removeListener('app:openRepository', listener)
+  },
+  onOpenRepositoryPath: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, repoPath: string) => callback(repoPath)
+    ipcRenderer.on('app:openRepositoryPath', listener)
+    return () => ipcRenderer.removeListener('app:openRepositoryPath', listener)
+  },
+}
+
 contextBridge.exposeInMainWorld('gitApi', gitApi)
+contextBridge.exposeInMainWorld('appApi', appApi)
