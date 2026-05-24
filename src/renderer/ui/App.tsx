@@ -223,8 +223,11 @@ export function App() {
             ...item,
             status: statusData,
             displayName: displayName(statusData.root),
+            diff: selection.path ? item.diff : null,
+            diffLoading: false,
             selectedPath: selection.path,
             selectedPane: selection.pane,
+            selectedLines: selection.path ? item.selectedLines : null,
             message: 'Ready.',
           }
         }),
