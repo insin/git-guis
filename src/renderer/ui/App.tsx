@@ -351,11 +351,20 @@ export function App() {
     setTabs((current) =>
       current.map((item) =>
         item.id === tab.id
-          ? { ...item, commitDraft: '', message: result.data?.trim() || 'Committed.' }
+          ? {
+              ...item,
+              amend: false,
+              commitDraft: '',
+              diff: null,
+              selectedLines: null,
+              selectedPath: null,
+              selectedPane: 'unstaged',
+              message: result.data?.trim() || 'Committed.',
+            }
           : item,
       ),
     )
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, false)
   }
 
   const loadAmendMessage = async (tab: RepoTab) => {
