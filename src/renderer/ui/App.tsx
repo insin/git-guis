@@ -25,6 +25,11 @@ import { loadJson, saveJson } from '../utils/storage'
 type DiffMode = 'highlighted' | 'classic'
 type Pane = 'unstaged' | 'staged'
 
+type SelectionPreference = {
+  pane: Pane
+  path: string | null
+}
+
 type Preferences = {
   theme: ThemeName
   diffMode: DiffMode
@@ -232,7 +237,12 @@ export function App() {
   }
 
   const refreshTab = useCallback(
-    async (tabId: string, explicitPath?: string, explicitAmend?: boolean) => {
+    async (
+      tabId: string,
+      explicitPath?: string,
+      explicitAmend?: boolean,
+      selectionPreference?: SelectionPreference,
+    ) => {
       const tab = tabs.find((item) => item.id === tabId)
       const repoPath = explicitPath ?? tab?.path
       if (!repoPath) return
@@ -248,7 +258,7 @@ export function App() {
       setTabs((current) =>
         current.map((item) => {
           if (item.id !== tabId) return item
-          const selection = preserveSelection(item, statusData)
+          const selection = preserveSelection(item, statusData, selectionPreference)
           return {
             ...item,
             status: statusData,
@@ -265,7 +275,7 @@ export function App() {
 
       const latestTab = tabs.find((item) => item.id === tabId) ?? tab
       const selection = latestTab
-        ? preserveSelection(latestTab, statusData)
+        ? preserveSelection(latestTab, statusData, selectionPreference)
         : { path: null, pane: 'unstaged' as Pane }
       if (selection.path) void loadDiff(tabId, repoPath, selection.path, selection.pane, amend)
     },
@@ -311,6 +321,7 @@ export function App() {
 
   const toggleStage = async (tab: RepoTab) => {
     if (!tab.selectedPath) return
+    const selectionPreference = previousFileSelection(tab)
     const result =
       tab.selectedPane === 'staged'
         ? await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
@@ -319,17 +330,18 @@ export function App() {
       showMessage(tab.id, result.error ?? 'Git operation failed.')
       return
     }
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const unstageSelected = async (tab: RepoTab) => {
     if (!tab.selectedPath || tab.selectedPane !== 'staged') return
+    const selectionPreference = previousFileSelection(tab)
     const result = await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
     if (!result.ok) {
       showMessage(tab.id, result.error ?? 'Unable to unstage file.')
       return
     }
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const revertSelected = async (tab: RepoTab) => {
@@ -1732,7 +1744,30 @@ function loadInitialActiveTabId(tabs: RepoTab[]) {
   return tabs.find((tab) => tab.path === activePath)?.id ?? tabs[0]?.id ?? null
 }
 
-function preserveSelection(tab: RepoTab, status: RepoStatus): { path: string | null; pane: Pane } {
+function previousFileSelection(tab: RepoTab): SelectionPreference | undefined {
+  if (!tab.status || !tab.selectedPath) return undefined
+  const list = tab.selectedPane === 'staged' ? tab.status.staged : tab.status.unstaged
+  const index = list.findIndex((change) => change.path === tab.selectedPath)
+  if (index === -1) return undefined
+
+  return {
+    pane: tab.selectedPane,
+    path: list[index - 1]?.path ?? list[index + 1]?.path ?? null,
+  }
+}
+
+function preserveSelection(
+  tab: RepoTab,
+  status: RepoStatus,
+  preference?: SelectionPreference,
+): { path: string | null; pane: Pane } {
+  if (preference) {
+    const preferredList = preference.pane === 'staged' ? status.staged : status.unstaged
+    if (preference.path && preferredList.some((change) => change.path === preference.path)) {
+      return { path: preference.path, pane: preference.pane }
+    }
+  }
+
   const list = tab.selectedPane === 'staged' ? status.staged : status.unstaged
   if (tab.selectedPath && list.some((change) => change.path === tab.selectedPath))
     return { path: tab.selectedPath, pane: tab.selectedPane }
