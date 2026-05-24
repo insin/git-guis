@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 
 import type { FileChange, GitDiff, RepoStatus, ThemeName } from '../../shared/types'
-import { formatCommitMessage } from '../utils/commitMessage'
 import {
   buildHunkPatch,
   buildSelectionPatch,
@@ -336,7 +335,7 @@ export function App() {
   }
 
   const commit = async (tab: RepoTab) => {
-    const message = formatCommitMessage(tab.commitDraft)
+    const message = tab.commitDraft
     if (!message.trim()) {
       showMessage(tab.id, 'Commit message is empty.')
       return
