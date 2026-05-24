@@ -43,7 +43,7 @@ export class GitService {
     }
   }
 
-  async getStatus(repoPath: string): Promise<GitResult<RepoStatus>> {
+  async getStatus(repoPath: string, amend = false): Promise<GitResult<RepoStatus>> {
     try {
       const result = await this.git(repoPath, [
         'status',
@@ -57,19 +57,25 @@ export class GitService {
           await this.git(repoPath, ['rev-parse', '--show-toplevel'], { allowFailure: true })
         ).stdout.trim() || repoPath
       const status = parsePorcelainV2(result.stdout)
+      const staged = amend ? await this.getAmendStagedChanges(repoPath) : status.staged
       return {
         ok: true,
-        data: { ...status, root },
+        data: { ...status, root, staged },
       }
     } catch (error) {
       return failure(error)
     }
   }
 
-  async getDiff(repoPath: string, filePath: string, staged: boolean): Promise<GitResult<GitDiff>> {
+  async getDiff(
+    repoPath: string,
+    filePath: string,
+    staged: boolean,
+    amend = false,
+  ): Promise<GitResult<GitDiff>> {
     try {
       const args = staged
-        ? ['diff', '--cached', '--no-ext-diff', '--', filePath]
+        ? ['diff', '--cached', '--no-ext-diff', ...(amend ? ['HEAD^'] : []), '--', filePath]
         : ['diff', '--no-ext-diff', '--', filePath]
       const result = await this.git(repoPath, args, { allowFailure: true })
       if (result.code !== 0) return { ok: false, error: result.stderr || 'Unable to read diff.' }
@@ -100,7 +106,14 @@ export class GitService {
     return this.runMutation(repoPath, ['add', '--', filePath])
   }
 
-  async unstageFile(repoPath: string, filePath: string): Promise<GitResult> {
+  async unstageFile(repoPath: string, filePath: string, amend = false): Promise<GitResult> {
+    if (amend) {
+      const reset = await this.git(repoPath, ['reset', '-q', 'HEAD^', '--', filePath], {
+        allowFailure: true,
+      })
+      if (reset.code === 0) return { ok: true }
+    }
+
     const restore = await this.git(repoPath, ['restore', '--staged', '--', filePath], {
       allowFailure: true,
     })
@@ -163,6 +176,14 @@ export class GitService {
     } catch (error) {
       return failure(error)
     }
+  }
+
+  private async getAmendStagedChanges(repoPath: string): Promise<FileChange[]> {
+    const result = await this.git(repoPath, ['diff', '--cached', '--name-status', '-z', 'HEAD^'], {
+      allowFailure: true,
+    })
+    if (result.code !== 0) return []
+    return parseNameStatus(result.stdout)
   }
 
   private async getUntrackedDiff(repoPath: string, filePath: string): Promise<GitResult<GitDiff>> {
@@ -375,6 +396,32 @@ function kindFromStatus(
 
 function sortChanges(changes: FileChange[]) {
   return changes.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+function parseNameStatus(stdout: string): FileChange[] {
+  const records = stdout.split('\0').filter(Boolean)
+  const changes: FileChange[] = []
+
+  for (let index = 0; index < records.length; index += 1) {
+    const status = records[index]
+    const code = status[0] ?? 'M'
+    const oldPath = code === 'R' || code === 'C' ? records[index + 1] : undefined
+    const filePath = code === 'R' || code === 'C' ? records[index + 2] : records[index + 1]
+    index += code === 'R' || code === 'C' ? 2 : 1
+    if (!filePath) continue
+
+    changes.push({
+      path: filePath,
+      oldPath,
+      kind: kindFromStatus(code, '.', oldPath, false),
+      staged: true,
+      unstaged: false,
+      indexStatus: code,
+      worktreeStatus: '.',
+    })
+  }
+
+  return sortChanges(changes)
 }
 
 function parseWorktrees(stdout: string): WorktreeInfo[] {

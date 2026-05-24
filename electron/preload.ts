@@ -6,11 +6,12 @@ import type { ThemeName } from '../src/shared/types.js'
 const gitApi: GitApi = {
   openRepository: () => ipcRenderer.invoke('dialog:openRepository'),
   validateRepository: (repoPath) => ipcRenderer.invoke('git:validateRepository', repoPath),
-  getStatus: (repoPath) => ipcRenderer.invoke('git:getStatus', repoPath),
-  getDiff: (repoPath, filePath, staged) =>
-    ipcRenderer.invoke('git:getDiff', repoPath, filePath, staged),
+  getStatus: (repoPath, amend) => ipcRenderer.invoke('git:getStatus', repoPath, amend),
+  getDiff: (repoPath, filePath, staged, amend) =>
+    ipcRenderer.invoke('git:getDiff', repoPath, filePath, staged, amend),
   stageFile: (repoPath, filePath) => ipcRenderer.invoke('git:stageFile', repoPath, filePath),
-  unstageFile: (repoPath, filePath) => ipcRenderer.invoke('git:unstageFile', repoPath, filePath),
+  unstageFile: (repoPath, filePath, amend) =>
+    ipcRenderer.invoke('git:unstageFile', repoPath, filePath, amend),
   revertFile: (repoPath, filePath, untracked) =>
     ipcRenderer.invoke('git:revertFile', repoPath, filePath, untracked),
   applyPatch: (repoPath, patch, reverse) =>

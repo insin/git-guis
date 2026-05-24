@@ -10,10 +10,15 @@ import type {
 export type GitApi = {
   openRepository(): Promise<string | null>
   validateRepository(repoPath: string): Promise<GitResult<RepoValidation>>
-  getStatus(repoPath: string): Promise<GitResult<RepoStatus>>
-  getDiff(repoPath: string, filePath: string, staged: boolean): Promise<GitResult<GitDiff>>
+  getStatus(repoPath: string, amend?: boolean): Promise<GitResult<RepoStatus>>
+  getDiff(
+    repoPath: string,
+    filePath: string,
+    staged: boolean,
+    amend?: boolean,
+  ): Promise<GitResult<GitDiff>>
   stageFile(repoPath: string, filePath: string): Promise<GitResult>
-  unstageFile(repoPath: string, filePath: string): Promise<GitResult>
+  unstageFile(repoPath: string, filePath: string, amend?: boolean): Promise<GitResult>
   revertFile(repoPath: string, filePath: string, untracked: boolean): Promise<GitResult>
   applyPatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult>
   commit(repoPath: string, message: string, amend: boolean): Promise<GitResult<string>>

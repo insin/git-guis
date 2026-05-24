@@ -39,6 +39,7 @@ type RepoTab = {
 }
 
 const TABS_KEY = 'git-guis.tabs'
+const ACTIVE_TAB_KEY = 'git-guis.activeTab'
 const PREFS_KEY = 'git-guis.preferences'
 const DRAFT_KEY = 'git-guis.drafts'
 const WORKSPACE_LAYOUT_KEY = 'git-guis.layout.workspace'
@@ -52,18 +53,18 @@ const defaultPrefs: Preferences = {
 
 export function App() {
   const [tabs, setTabs] = useState<RepoTab[]>(() => loadInitialTabs())
-  const [activeTabId, setActiveTabId] = useState<string | null>(() => tabs[0]?.id ?? null)
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => loadInitialActiveTabId(tabs))
   const [prefs, setPrefs] = useState<Preferences>(() => loadJson(PREFS_KEY, defaultPrefs))
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
 
   useEffect(() => {
     document.documentElement.dataset.theme = prefs.theme
     saveJson(PREFS_KEY, prefs)
-    window.appApi.setTheme(prefs.theme)
+    window.appApi?.setTheme(prefs.theme)
   }, [prefs])
 
   useEffect(() => {
-    return window.appApi.onThemeSelected((theme) => {
+    return window.appApi?.onThemeSelected((theme) => {
       setPrefs((current) => ({ ...current, theme }))
     })
   }, [])
@@ -74,6 +75,10 @@ export function App() {
       tabs.map((tab) => tab.path),
     )
   }, [tabs])
+
+  useEffect(() => {
+    saveJson(ACTIVE_TAB_KEY, activeTab?.path ?? null)
+  }, [activeTab?.path])
 
   useEffect(() => {
     for (const tab of tabs) {
@@ -91,6 +96,10 @@ export function App() {
       if (isStageShortcut(event)) {
         event.preventDefault()
         void toggleStage(activeTab)
+      }
+      if (isUnstageShortcut(event)) {
+        event.preventDefault()
+        void unstageSelected(activeTab)
       }
       if (isRevertShortcut(event)) {
         event.preventDefault()
@@ -149,20 +158,20 @@ export function App() {
   }
 
   useEffect(() => {
-    return window.appApi.onOpenRepository(() => {
+    return window.appApi?.onOpenRepository(() => {
       void openRepository()
     })
   }, [openRepository])
 
   useEffect(() => {
-    const unsubscribe = window.appApi.onOpenRepositoryPath((repoPath) => {
+    const unsubscribe = window.appApi?.onOpenRepositoryPath((repoPath) => {
       void openRepositoryPath(repoPath)
     })
     return unsubscribe
   }, [openRepositoryPath])
 
   useEffect(() => {
-    void window.appApi.getLaunchRepositories().then((repoPaths) => {
+    void window.appApi?.getLaunchRepositories().then((repoPaths) => {
       for (const repoPath of repoPaths) void openRepositoryPath(repoPath)
     })
   }, [])
@@ -170,18 +179,22 @@ export function App() {
   const closeTab = (tabId: string) => {
     setTabs((current) => {
       const next = current.filter((tab) => tab.id !== tabId)
-      if (activeTabId === tabId) setActiveTabId(next[0]?.id ?? null)
+      if (activeTabId === tabId) {
+        const closedIndex = current.findIndex((tab) => tab.id === tabId)
+        setActiveTabId(next[Math.max(0, closedIndex - 1)]?.id ?? next[0]?.id ?? null)
+      }
       return next
     })
   }
 
   const refreshTab = useCallback(
-    async (tabId: string, explicitPath?: string) => {
+    async (tabId: string, explicitPath?: string, explicitAmend?: boolean) => {
       const tab = tabs.find((item) => item.id === tabId)
       const repoPath = explicitPath ?? tab?.path
       if (!repoPath) return
+      const amend = explicitAmend ?? tab?.amend ?? false
 
-      const status = await window.gitApi.getStatus(repoPath)
+      const status = await window.gitApi.getStatus(repoPath, amend)
       if (!status.ok || !status.data) {
         showMessage(tabId, status.error ?? 'Unable to refresh repository.')
         return
@@ -207,12 +220,18 @@ export function App() {
       const selection = latestTab
         ? preserveSelection(latestTab, statusData)
         : { path: null, pane: 'unstaged' as Pane }
-      if (selection.path) void loadDiff(tabId, repoPath, selection.path, selection.pane)
+      if (selection.path) void loadDiff(tabId, repoPath, selection.path, selection.pane, amend)
     },
     [tabs],
   )
 
-  const loadDiff = async (tabId: string, repoPath: string, filePath: string, pane: Pane) => {
+  const loadDiff = async (
+    tabId: string,
+    repoPath: string,
+    filePath: string,
+    pane: Pane,
+    amend: boolean,
+  ) => {
     setTabs((current) =>
       current.map((tab) =>
         tab.id === tabId
@@ -228,7 +247,7 @@ export function App() {
       ),
     )
 
-    const result = await window.gitApi.getDiff(repoPath, filePath, pane === 'staged')
+    const result = await window.gitApi.getDiff(repoPath, filePath, pane === 'staged', amend)
     setTabs((current) =>
       current.map((tab) =>
         tab.id === tabId
@@ -247,10 +266,20 @@ export function App() {
     if (!tab.selectedPath) return
     const result =
       tab.selectedPane === 'staged'
-        ? await window.gitApi.unstageFile(tab.path, tab.selectedPath)
+        ? await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
         : await window.gitApi.stageFile(tab.path, tab.selectedPath)
     if (!result.ok) {
       showMessage(tab.id, result.error ?? 'Git operation failed.')
+      return
+    }
+    await refreshTab(tab.id)
+  }
+
+  const unstageSelected = async (tab: RepoTab) => {
+    if (!tab.selectedPath || tab.selectedPane !== 'staged') return
+    const result = await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
+    if (!result.ok) {
+      showMessage(tab.id, result.error ?? 'Unable to unstage file.')
       return
     }
     await refreshTab(tab.id)
@@ -406,7 +435,9 @@ export function App() {
           tab={activeTab}
           prefs={prefs}
           onRefresh={() => refreshTab(activeTab.id)}
-          onSelect={(pane, change) => loadDiff(activeTab.id, activeTab.path, change.path, pane)}
+          onSelect={(pane, change) =>
+            loadDiff(activeTab.id, activeTab.path, change.path, pane, activeTab.amend)
+          }
           onToggleStage={() => toggleStage(activeTab)}
           onRevert={() => revertSelected(activeTab)}
           onApplyHunk={(hunkIndex) => applyHunk(activeTab, hunkIndex)}
@@ -424,9 +455,9 @@ export function App() {
             setTabs((current) =>
               current.map((tab) => (tab.id === activeTab.id ? { ...tab, amend } : tab)),
             )
+            void refreshTab(activeTab.id, undefined, amend)
             if (amend && !activeTab.commitDraft.trim()) void loadAmendMessage(activeTab)
           }}
-          onLoadAmendMessage={() => loadAmendMessage(activeTab)}
         />
       ) : (
         <section className="empty-state">
@@ -452,7 +483,6 @@ type RepositoryViewProps = {
   onDraftChange(value: string): void
   onCommit(): void
   onAmendChange(amend: boolean): void
-  onLoadAmendMessage(): void
 }
 
 type DiffContextMenu = {
@@ -475,13 +505,17 @@ function RepositoryView({
   onDraftChange,
   onCommit,
   onAmendChange,
-  onLoadAmendMessage,
 }: RepositoryViewProps) {
   const hunks = useMemo(
     () => (tab.diff?.kind === 'text' ? parseUnifiedDiff(tab.diff.patch).hunks : []),
     [tab.diff],
   )
-  const diffTitle = tab.selectedPane === 'staged' ? 'Staged for commit' : 'Modified, not staged'
+  const diffTitle =
+    tab.selectedPane === 'staged'
+      ? tab.amend
+        ? 'Staged for amended commit'
+        : 'Staged for commit'
+      : 'Modified, not staged'
   const [contextMenu, setContextMenu] = useState<DiffContextMenu>(null)
 
   useEffect(() => {
@@ -540,7 +574,7 @@ function RepositoryView({
             <Separator className="resize-handle resize-handle-vertical" id="file-list-separator" />
             <Panel className="file-list-panel" defaultSize="44%" id="staged" minSize={100}>
               <FileList
-                title="Staged Changes (Will Commit)"
+                title={tab.amend ? 'Staged Changes (Will Amend)' : 'Staged Changes (Will Commit)'}
                 tone="staged"
                 changes={tab.status?.staged ?? []}
                 selectedPath={tab.selectedPane === 'staged' ? tab.selectedPath : null}
@@ -649,11 +683,6 @@ function RepositoryView({
                   />
                   Amend Last Commit
                 </label>
-                {tab.amend && (
-                  <button onClick={onLoadAmendMessage} type="button">
-                    Load last message
-                  </button>
-                )}
               </div>
               <div className="commit-grid">
                 <button onClick={onCommit} type="button">
@@ -882,6 +911,12 @@ function isStageShortcut(event: KeyboardEvent) {
   )
 }
 
+function isUnstageShortcut(event: KeyboardEvent) {
+  return (
+    event.key.toLowerCase() === 'u' && primaryModifier(event) && !event.altKey && !event.shiftKey
+  )
+}
+
 function isRevertShortcut(event: KeyboardEvent) {
   return (
     event.key.toLowerCase() === 'j' && primaryModifier(event) && !event.altKey && !event.shiftKey
@@ -919,6 +954,11 @@ function createTab(repoPath: string): RepoTab {
 
 function loadInitialTabs() {
   return loadJson<string[]>(TABS_KEY, []).map(createTab)
+}
+
+function loadInitialActiveTabId(tabs: RepoTab[]) {
+  const activePath = loadJson<string | null>(ACTIVE_TAB_KEY, null)
+  return tabs.find((tab) => tab.path === activePath)?.id ?? tabs[0]?.id ?? null
 }
 
 function preserveSelection(tab: RepoTab, status: RepoStatus): { path: string | null; pane: Pane } {

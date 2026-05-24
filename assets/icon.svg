@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="180mm"
+   height="180mm"
+   viewBox="0 0 180 180"
+   version="1.1"
+   id="svg5"
+   inkscape:export-filename="icon.png"
+   inkscape:export-xdpi="144.49779"
+   inkscape:export-ydpi="144.49779"
+   inkscape:version="1.2.2 (b0a84865, 2022-12-01)"
+   sodipodi:docname="icon.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.48908359"
+     inkscape:cx="530.58415"
+     inkscape:cy="428.35214"
+     inkscape:window-width="1438"
+     inkscape:window-height="759"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-24.165661,-71.52071)">
+    <path
+       sodipodi:type="star"
+       style="fill:#e30614;fill-opacity:1;stroke-width:2.08879;stroke-linejoin:round;-inkscape-stroke:none;stop-color:#000000"
+       id="path234"
+       inkscape:flatsided="false"
+       sodipodi:sides="3"
+       sodipodi:cx="62.923729"
+       sodipodi:cy="93.127113"
+       sodipodi:r1="93.339455"
+       sodipodi:r2="46.669727"
+       sodipodi:arg1="-1.5707963"
+       sodipodi:arg2="-0.52359878"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="M 62.923731,-0.21234131 103.3409,69.79225 l 40.41717,70.00459 -80.834341,0 -80.83434,0 40.41717,-70.00459 z"
+       inkscape:transform-center-y="-66.123001"
+       inkscape:transform-center-x="31.461864"
+       transform="translate(51.241933,91.728459)" />
+    <text
+       xml:space="preserve"
+       style="font-weight:bold;font-size:46.9248px;font-family:Manrope;-inkscape-font-specification:'Manrope Bold';fill:#261920;fill-opacity:1;stroke-width:1.92945;stroke-linejoin:round;-inkscape-stroke:none;stop-color:#000000"
+       x="64.730515"
+       y="218.17392"
+       id="text1012"><tspan
+         sodipodi:role="line"
+         id="tspan1010"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:BodoniXT;-inkscape-font-specification:'BodoniXT Bold';fill:#261920;fill-opacity:1;stroke-width:1.92945"
+         x="64.730515"
+         y="218.17392">GITS</tspan></text>
+  </g>
+</svg>

@@ -153,7 +153,7 @@ function createWindow() {
   if (devServerUrl) {
     void mainWindow.loadURL(devServerUrl)
   } else {
-    void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
 }
 
@@ -210,15 +210,19 @@ ipcMain.handle('dialog:openRepository', async () => {
 ipcMain.handle('git:validateRepository', (_event, repoPath: string) =>
   git.validateRepository(repoPath),
 )
-ipcMain.handle('git:getStatus', (_event, repoPath: string) => git.getStatus(repoPath))
-ipcMain.handle('git:getDiff', (_event, repoPath: string, filePath: string, staged: boolean) =>
-  git.getDiff(repoPath, filePath, staged),
+ipcMain.handle('git:getStatus', (_event, repoPath: string, amend: boolean) =>
+  git.getStatus(repoPath, amend),
+)
+ipcMain.handle(
+  'git:getDiff',
+  (_event, repoPath: string, filePath: string, staged: boolean, amend: boolean) =>
+    git.getDiff(repoPath, filePath, staged, amend),
 )
 ipcMain.handle('git:stageFile', (_event, repoPath: string, filePath: string) =>
   git.stageFile(repoPath, filePath),
 )
-ipcMain.handle('git:unstageFile', (_event, repoPath: string, filePath: string) =>
-  git.unstageFile(repoPath, filePath),
+ipcMain.handle('git:unstageFile', (_event, repoPath: string, filePath: string, amend: boolean) =>
+  git.unstageFile(repoPath, filePath, amend),
 )
 ipcMain.handle(
   'git:revertFile',

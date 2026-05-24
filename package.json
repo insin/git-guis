@@ -23,13 +23,6 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "dependencies": {
-    "@pierre/diffs": "^1.2.2",
-    "lucide-react": "^1.16.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "react-resizable-panels": "^4.11.1"
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@electron-forge/cli": "^7.11.2",
@@ -44,6 +37,10 @@
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.1",
     "electron": "^42.2.0",
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-resizable-panels": "^4.11.2",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
