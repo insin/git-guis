@@ -98,6 +98,8 @@ export function App() {
   const [showCommitBrowser, setShowCommitBrowser] = useState(() =>
     loadJson(COMMIT_BROWSER_VISIBLE_KEY, false),
   )
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
   const [pushDialog, setPushDialog] = useState<PushDialogState | null>(null)
   const [resetDialog, setResetDialog] = useState<ResetDialogState | null>(null)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
@@ -232,6 +234,21 @@ export function App() {
         const closedIndex = current.findIndex((tab) => tab.id === tabId)
         setActiveTabId(next[Math.max(0, closedIndex - 1)]?.id ?? next[0]?.id ?? null)
       }
+      return next
+    })
+  }
+
+  const reorderTab = (dragId: string, targetId: string) => {
+    if (dragId === targetId) return
+    setTabs((current) => {
+      const dragIndex = current.findIndex((tab) => tab.id === dragId)
+      const targetIndex = current.findIndex((tab) => tab.id === targetId)
+      if (dragIndex === -1 || targetIndex === -1) return current
+
+      const next = [...current]
+      const [draggedTab] = next.splice(dragIndex, 1)
+      if (!draggedTab) return current
+      next.splice(targetIndex, 0, draggedTab)
       return next
     })
   }
@@ -595,30 +612,62 @@ export function App() {
     <main className="app-shell">
       <header className="tab-bar">
         <div className="drag-region" />
-        {tabs.map((tab) => (
-          <div className={`repo-tab ${tab.id === activeTab?.id ? 'active' : ''}`} key={tab.id}>
-            <button
-              className="tab-main"
-              onClick={() => setActiveTabId(tab.id)}
-              title={tab.path}
-              type="button"
-            >
-              <span className="tab-title">{tab.displayName}</span>
-              <span className="tab-branch">{tab.status?.branch ?? 'detached'}</span>
-            </button>
-            <button
-              className="tab-close"
-              onClick={(event) => {
-                event.stopPropagation()
-                closeTab(tab.id)
+        <ul className="tab-list">
+          {tabs.map((tab) => (
+            <li
+              className={`repo-tab ${tab.id === activeTab?.id ? 'active' : ''} ${
+                tab.id === draggedTabId ? 'dragging' : ''
+              } ${tab.id === dragOverTabId && tab.id !== draggedTabId ? 'drag-over' : ''}`}
+              draggable
+              key={tab.id}
+              onDragEnd={() => {
+                setDraggedTabId(null)
+                setDragOverTabId(null)
               }}
-              title={`Close ${tab.displayName}`}
-              type="button"
+              onDragEnter={(event) => {
+                event.preventDefault()
+                if (draggedTabId && draggedTabId !== tab.id) setDragOverTabId(tab.id)
+              }}
+              onDragOver={(event) => {
+                event.preventDefault()
+                if (draggedTabId && draggedTabId !== tab.id) setDragOverTabId(tab.id)
+              }}
+              onDragStart={(event) => {
+                setDraggedTabId(tab.id)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', tab.id)
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                const dragId = draggedTabId ?? event.dataTransfer.getData('text/plain')
+                if (dragId) reorderTab(dragId, tab.id)
+                setDraggedTabId(null)
+                setDragOverTabId(null)
+              }}
             >
-              <X aria-hidden size={13} strokeWidth={2.25} />
-            </button>
-          </div>
-        ))}
+              <button
+                className="tab-main"
+                onClick={() => setActiveTabId(tab.id)}
+                title={tab.path}
+                type="button"
+              >
+                <span className="tab-title">{tab.displayName}</span>
+                <span className="tab-branch">{tab.status?.branch ?? 'detached'}</span>
+              </button>
+              <button
+                className="tab-close"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  closeTab(tab.id)
+                }}
+                title={`Close ${tab.displayName}`}
+                type="button"
+              >
+                <X aria-hidden size={13} strokeWidth={2.25} />
+              </button>
+            </li>
+          ))}
+        </ul>
         <button
           aria-label="Open repository"
           className="tab-add"

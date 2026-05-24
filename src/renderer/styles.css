@@ -167,6 +167,12 @@ input:not([type="checkbox"]) {
   flex: 0 0 auto;
 }
 
+.tab-list {
+  @apply flex min-w-0 items-center gap-1 self-stretch p-0;
+  margin: 0;
+  list-style: none;
+}
+
 .repo-tab,
 .tab-add,
 .tab-bar select {
@@ -194,6 +200,15 @@ input:not([type="checkbox"]) {
 
 .repo-tab.active {
   background: color-mix(in srgb, var(--button) 46%, var(--panel-bg));
+  color: var(--text);
+}
+
+.repo-tab.dragging {
+  opacity: 0.42;
+}
+
+.repo-tab.drag-over {
+  background: color-mix(in srgb, var(--selection) 42%, var(--panel-bg));
   color: var(--text);
 }
 
