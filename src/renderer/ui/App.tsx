@@ -28,6 +28,15 @@ type Pane = 'unstaged' | 'staged'
 type SelectionPreference = {
   pane: Pane
   path: string | null
+  paths?: string[]
+  anchorPath?: string | null
+}
+
+type FileSelection = {
+  pane: Pane
+  path: string | null
+  paths: string[]
+  anchorPath: string | null
 }
 
 type Preferences = {
@@ -42,6 +51,8 @@ type RepoTab = {
   status: RepoStatus | null
   selectedPane: Pane
   selectedPath: string | null
+  selectedPaths: string[]
+  selectionAnchorPath: string | null
   diff: GitDiff | null
   diffLoading: boolean
   commitDraft: string
@@ -284,6 +295,8 @@ export function App() {
             diffLoading: false,
             selectedPath: selection.path,
             selectedPane: selection.pane,
+            selectedPaths: selection.paths,
+            selectionAnchorPath: selection.anchorPath,
             selectedLines: selection.path ? item.selectedLines : null,
             message: 'Ready.',
           }
@@ -293,7 +306,7 @@ export function App() {
       const latestTab = tabs.find((item) => item.id === tabId) ?? tab
       const selection = latestTab
         ? preserveSelection(latestTab, statusData, selectionPreference)
-        : { path: null, pane: 'unstaged' as Pane }
+        : { path: null, pane: 'unstaged' as Pane, paths: [], anchorPath: null }
       if (selection.path) void loadDiff(tabId, repoPath, selection.path, selection.pane, amend)
     },
     [tabs],
@@ -305,6 +318,7 @@ export function App() {
     filePath: string,
     pane: Pane,
     amend: boolean,
+    selection?: FileSelection,
   ) => {
     setTabs((current) =>
       current.map((tab) =>
@@ -313,6 +327,8 @@ export function App() {
               ...tab,
               selectedPath: filePath,
               selectedPane: pane,
+              selectedPaths: selection?.paths ?? tab.selectedPaths,
+              selectionAnchorPath: selection?.anchorPath ?? tab.selectionAnchorPath,
               diffLoading: true,
               selectedLines: null,
               message: 'Loading diff...',
@@ -336,52 +352,102 @@ export function App() {
     )
   }
 
-  const toggleStage = async (tab: RepoTab) => {
-    if (!tab.selectedPath) return
-    const selectionPreference = previousFileSelection(tab)
-    const result =
-      tab.selectedPane === 'staged'
-        ? await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
-        : await window.gitApi.stageFile(tab.path, tab.selectedPath)
-    if (!result.ok) {
-      showMessage(tab.id, result.error ?? 'Git operation failed.')
+  const selectFile = (
+    tab: RepoTab,
+    pane: Pane,
+    change: FileChange,
+    event: ReactMouseEvent,
+    changes: FileChange[],
+  ) => {
+    const selection = nextFileSelection(tab, pane, change.path, changes, event)
+    if (!selection.path) {
+      setTabs((current) =>
+        current.map((item) =>
+          item.id === tab.id
+            ? {
+                ...item,
+                selectedPane: selection.pane,
+                selectedPath: null,
+                selectedPaths: [],
+                selectionAnchorPath: selection.anchorPath,
+                diff: null,
+                selectedLines: null,
+              }
+            : item,
+        ),
+      )
       return
     }
+
+    void loadDiff(tab.id, tab.path, selection.path, selection.pane, tab.amend, selection)
+  }
+
+  const toggleStage = async (tab: RepoTab) => {
+    const filePaths = selectedFilePaths(tab)
+    if (filePaths.length === 0) return
+    const selectionPreference = previousFileSelection(tab)
+
+    for (const filePath of filePaths) {
+      const result =
+        tab.selectedPane === 'staged'
+          ? await window.gitApi.unstageFile(tab.path, filePath, tab.amend)
+          : await window.gitApi.stageFile(tab.path, filePath)
+      if (!result.ok) {
+        showMessage(tab.id, result.error ?? 'Git operation failed.')
+        await refreshTab(tab.id, undefined, undefined, selectionPreference)
+        return
+      }
+    }
+
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const unstageSelected = async (tab: RepoTab) => {
-    if (!tab.selectedPath || tab.selectedPane !== 'staged') return
+    if (tab.selectedPane !== 'staged') return
+    const filePaths = selectedFilePaths(tab)
+    if (filePaths.length === 0) return
     const selectionPreference = previousFileSelection(tab)
-    const result = await window.gitApi.unstageFile(tab.path, tab.selectedPath, tab.amend)
-    if (!result.ok) {
-      showMessage(tab.id, result.error ?? 'Unable to unstage file.')
-      return
+
+    for (const filePath of filePaths) {
+      const result = await window.gitApi.unstageFile(tab.path, filePath, tab.amend)
+      if (!result.ok) {
+        showMessage(tab.id, result.error ?? 'Unable to unstage file.')
+        await refreshTab(tab.id, undefined, undefined, selectionPreference)
+        return
+      }
     }
+
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const revertSelected = async (tab: RepoTab) => {
     if (!tab.selectedPath || tab.selectedPane !== 'unstaged') return
-    const change = tab.status?.unstaged.find((item) => item.path === tab.selectedPath)
-    if (!change) return
+    const changes = selectedChanges(tab, 'unstaged')
+    if (changes.length === 0) return
 
+    const onlyChange = changes[0]
     const message =
-      change.kind === 'untracked'
-        ? `Move untracked file to Trash?\n\n${change.path}`
-        : `Discard unstaged changes in this file?\n\n${change.path}`
+      changes.length === 1 && onlyChange
+        ? onlyChange.kind === 'untracked'
+          ? `Move untracked file to Trash?\n\n${onlyChange.path}`
+          : `Discard unstaged changes in this file?\n\n${onlyChange.path}`
+        : `Discard or trash changes in ${changes.length} selected files?`
     if (!window.confirm(message)) return
 
-    const result = await window.gitApi.revertFile(
-      tab.path,
-      change.path,
-      change.kind === 'untracked',
-    )
-    if (!result.ok) {
-      showMessage(tab.id, result.error ?? 'Unable to revert file.')
-      return
+    const selectionPreference = previousFileSelection(tab)
+    for (const change of changes) {
+      const result = await window.gitApi.revertFile(
+        tab.path,
+        change.path,
+        change.kind === 'untracked',
+      )
+      if (!result.ok) {
+        showMessage(tab.id, result.error ?? 'Unable to revert file.')
+        await refreshTab(tab.id, undefined, undefined, selectionPreference)
+        return
+      }
     }
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const applyHunk = async (tab: RepoTab, hunkIndex: number) => {
@@ -435,6 +501,8 @@ export function App() {
               diff: null,
               selectedLines: null,
               selectedPath: null,
+              selectedPaths: [],
+              selectionAnchorPath: null,
               selectedPane: 'unstaged',
               message: result.data?.trim() || 'Committed.',
             }
@@ -695,8 +763,8 @@ export function App() {
           showCommitBrowser={showCommitBrowser}
           onToggleCommitBrowser={() => setShowCommitBrowser((visible) => !visible)}
           onRefresh={() => refreshTab(activeTab.id)}
-          onSelect={(pane, change) =>
-            loadDiff(activeTab.id, activeTab.path, change.path, pane, activeTab.amend)
+          onSelect={(pane, change, event, changes) =>
+            selectFile(activeTab, pane, change, event, changes)
           }
           onToggleStage={() => toggleStage(activeTab)}
           onRevert={() => revertSelected(activeTab)}
@@ -764,7 +832,7 @@ type RepositoryViewProps = {
   showCommitBrowser: boolean
   onToggleCommitBrowser(): void
   onRefresh(): void
-  onSelect(pane: Pane, change: FileChange): void
+  onSelect(pane: Pane, change: FileChange, event: ReactMouseEvent, changes: FileChange[]): void
   onToggleStage(): void
   onRevert(): void
   onApplyHunk(hunkIndex: number): void
@@ -870,7 +938,8 @@ function RepositoryView({
                 tone="unstaged"
                 changes={tab.status?.unstaged ?? []}
                 selectedPath={tab.selectedPane === 'unstaged' ? tab.selectedPath : null}
-                onSelect={(change) => onSelect('unstaged', change)}
+                selectedPaths={tab.selectedPane === 'unstaged' ? tab.selectedPaths : []}
+                onSelect={(change, event, changes) => onSelect('unstaged', change, event, changes)}
               />
             </Panel>
             <Separator className="resize-handle resize-handle-vertical" id="file-list-separator" />
@@ -880,7 +949,8 @@ function RepositoryView({
                 tone="staged"
                 changes={tab.status?.staged ?? []}
                 selectedPath={tab.selectedPane === 'staged' ? tab.selectedPath : null}
-                onSelect={(change) => onSelect('staged', change)}
+                selectedPaths={tab.selectedPane === 'staged' ? tab.selectedPaths : []}
+                onSelect={(change, event, changes) => onSelect('staged', change, event, changes)}
               />
             </Panel>
           </Group>
@@ -1504,10 +1574,12 @@ type FileListProps = {
   tone: 'unstaged' | 'staged'
   changes: FileChange[]
   selectedPath: string | null
-  onSelect(change: FileChange): void
+  selectedPaths: string[]
+  onSelect(change: FileChange, event: ReactMouseEvent, changes: FileChange[]): void
 }
 
-function FileList({ title, tone, changes, selectedPath, onSelect }: FileListProps) {
+function FileList({ title, tone, changes, selectedPath, selectedPaths, onSelect }: FileListProps) {
+  const selectedPathSet = new Set(selectedPaths)
   return (
     <section className="file-list">
       <header className={tone}>{title}</header>
@@ -1517,9 +1589,11 @@ function FileList({ title, tone, changes, selectedPath, onSelect }: FileListProp
         ) : (
           changes.map((change) => (
             <button
-              className={`file-row ${selectedPath === change.path ? 'selected' : ''}`}
+              className={`file-row ${selectedPathSet.has(change.path) ? 'selected' : ''} ${
+                selectedPath === change.path ? 'active' : ''
+              }`}
               key={`${tone}-${change.path}`}
-              onClick={() => onSelect(change)}
+              onClick={(event) => onSelect(change, event, changes)}
               title={change.path}
               type="button"
             >
@@ -1769,6 +1843,59 @@ function clampedMenuPosition(x: number, y: number, width: number, height: number
   }
 }
 
+function nextFileSelection(
+  tab: RepoTab,
+  pane: Pane,
+  clickedPath: string,
+  changes: FileChange[],
+  event: ReactMouseEvent,
+): FileSelection {
+  const paths = changes.map((change) => change.path)
+  const samePane = tab.selectedPane === pane
+  const currentPaths = samePane ? tab.selectedPaths.filter((path) => paths.includes(path)) : []
+  const anchorPath = samePane ? tab.selectionAnchorPath : null
+
+  if (event.shiftKey) {
+    const anchorIndex = anchorPath ? paths.indexOf(anchorPath) : -1
+    const clickedIndex = paths.indexOf(clickedPath)
+    if (anchorIndex !== -1 && clickedIndex !== -1) {
+      const start = Math.min(anchorIndex, clickedIndex)
+      const end = Math.max(anchorIndex, clickedIndex)
+      return {
+        pane,
+        path: clickedPath,
+        paths: paths.slice(start, end + 1),
+        anchorPath,
+      }
+    }
+  }
+
+  if (primaryMouseModifier(event)) {
+    const selected = new Set(currentPaths)
+    if (selected.has(clickedPath)) selected.delete(clickedPath)
+    else selected.add(clickedPath)
+
+    const nextPaths = paths.filter((path) => selected.has(path))
+    return {
+      pane,
+      path: selected.has(clickedPath) ? clickedPath : (nextPaths[0] ?? null),
+      paths: nextPaths,
+      anchorPath: clickedPath,
+    }
+  }
+
+  return {
+    pane,
+    path: clickedPath,
+    paths: [clickedPath],
+    anchorPath: clickedPath,
+  }
+}
+
+function primaryMouseModifier(event: ReactMouseEvent) {
+  return isMacPlatform() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+}
+
 function createTab(repoPath: string): RepoTab {
   return {
     id: crypto.randomUUID(),
@@ -1777,6 +1904,8 @@ function createTab(repoPath: string): RepoTab {
     status: null,
     selectedPane: 'unstaged',
     selectedPath: null,
+    selectedPaths: [],
+    selectionAnchorPath: null,
     diff: null,
     diffLoading: false,
     commitDraft: loadDraft(repoPath),
@@ -1795,15 +1924,43 @@ function loadInitialActiveTabId(tabs: RepoTab[]) {
   return tabs.find((tab) => tab.path === activePath)?.id ?? tabs[0]?.id ?? null
 }
 
+function selectedFilePaths(tab: RepoTab) {
+  const changes = selectedPaneChanges(tab)
+  const existingPaths = new Set(changes.map((change) => change.path))
+  const selectedPaths = tab.selectedPaths.filter((path) => existingPaths.has(path))
+  if (selectedPaths.length > 0) return selectedPaths
+  return tab.selectedPath && existingPaths.has(tab.selectedPath) ? [tab.selectedPath] : []
+}
+
+function selectedChanges(tab: RepoTab, pane: Pane) {
+  const changes = pane === 'staged' ? tab.status?.staged : tab.status?.unstaged
+  if (!changes || tab.selectedPane !== pane) return []
+  const selectedPaths = new Set(selectedFilePaths(tab))
+  return changes.filter((change) => selectedPaths.has(change.path))
+}
+
+function selectedPaneChanges(tab: RepoTab) {
+  return tab.selectedPane === 'staged' ? (tab.status?.staged ?? []) : (tab.status?.unstaged ?? [])
+}
+
 function previousFileSelection(tab: RepoTab): SelectionPreference | undefined {
   if (!tab.status || !tab.selectedPath) return undefined
-  const list = tab.selectedPane === 'staged' ? tab.status.staged : tab.status.unstaged
-  const index = list.findIndex((change) => change.path === tab.selectedPath)
-  if (index === -1) return undefined
+  const list = selectedPaneChanges(tab)
+  const selectedPaths = selectedFilePaths(tab)
+  const selectedIndexes = selectedPaths
+    .map((path) => list.findIndex((change) => change.path === path))
+    .filter((index) => index !== -1)
+  if (selectedIndexes.length === 0) return undefined
+
+  const firstIndex = Math.min(...selectedIndexes)
+  const lastIndex = Math.max(...selectedIndexes)
+  const preferredPath = list[firstIndex - 1]?.path ?? list[lastIndex + 1]?.path ?? null
 
   return {
     pane: tab.selectedPane,
-    path: list[index - 1]?.path ?? list[index + 1]?.path ?? null,
+    path: preferredPath,
+    paths: preferredPath ? [preferredPath] : [],
+    anchorPath: preferredPath,
   }
 }
 
@@ -1811,20 +1968,55 @@ function preserveSelection(
   tab: RepoTab,
   status: RepoStatus,
   preference?: SelectionPreference,
-): { path: string | null; pane: Pane } {
+): FileSelection {
   if (preference) {
     const preferredList = preference.pane === 'staged' ? status.staged : status.unstaged
+    const preferredPaths = (preference.paths ?? []).filter((path) =>
+      preferredList.some((change) => change.path === path),
+    )
     if (preference.path && preferredList.some((change) => change.path === preference.path)) {
-      return { path: preference.path, pane: preference.pane }
+      return {
+        path: preference.path,
+        pane: preference.pane,
+        paths: preferredPaths.length > 0 ? preferredPaths : [preference.path],
+        anchorPath: preference.anchorPath ?? preference.path,
+      }
     }
   }
 
   const list = tab.selectedPane === 'staged' ? status.staged : status.unstaged
-  if (tab.selectedPath && list.some((change) => change.path === tab.selectedPath))
-    return { path: tab.selectedPath, pane: tab.selectedPane }
-  if (status.unstaged[0]) return { path: status.unstaged[0].path, pane: 'unstaged' }
-  if (status.staged[0]) return { path: status.staged[0].path, pane: 'staged' }
-  return { path: null, pane: 'unstaged' }
+  const paths = tab.selectedPaths.filter((path) => list.some((change) => change.path === path))
+  if (tab.selectedPath && list.some((change) => change.path === tab.selectedPath)) {
+    return {
+      path: tab.selectedPath,
+      pane: tab.selectedPane,
+      paths: paths.length > 0 ? paths : [tab.selectedPath],
+      anchorPath: tab.selectionAnchorPath ?? tab.selectedPath,
+    }
+  }
+  if (paths[0]) {
+    return {
+      path: paths[0],
+      pane: tab.selectedPane,
+      paths,
+      anchorPath: tab.selectionAnchorPath ?? paths[0],
+    }
+  }
+  if (status.unstaged[0])
+    return {
+      path: status.unstaged[0].path,
+      pane: 'unstaged',
+      paths: [status.unstaged[0].path],
+      anchorPath: status.unstaged[0].path,
+    }
+  if (status.staged[0])
+    return {
+      path: status.staged[0].path,
+      pane: 'staged',
+      paths: [status.staged[0].path],
+      anchorPath: status.staged[0].path,
+    }
+  return { path: null, pane: 'unstaged', paths: [], anchorPath: null }
 }
 
 function displayName(repoPath: string) {
