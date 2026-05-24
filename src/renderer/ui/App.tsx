@@ -993,9 +993,7 @@ function RepositoryView({
                   />
                 ) : tab.diff?.kind === 'binary' ? (
                   <BinaryDiff summary={tab.diff.summary} />
-                ) : (
-                  <div className="placeholder">Select a file to review changes.</div>
-                )}
+                ) : null}
               </div>
 
               {contextMenu && (
@@ -1584,9 +1582,7 @@ function FileList({ title, tone, changes, selectedPath, selectedPaths, onSelect 
     <section className="file-list">
       <header className={tone}>{title}</header>
       <div className="file-list-body">
-        {changes.length === 0 ? (
-          <div className="empty-list">No changes</div>
-        ) : (
+        {changes.length > 0 &&
           changes.map((change) => (
             <button
               className={`file-row ${selectedPathSet.has(change.path) ? 'selected' : ''} ${
@@ -1600,8 +1596,7 @@ function FileList({ title, tone, changes, selectedPath, selectedPaths, onSelect 
               <FileStatusIcon change={change} pane={tone} />
               <span>{change.path}</span>
             </button>
-          ))
-        )}
+          ))}
       </div>
     </section>
   )
@@ -1644,7 +1639,7 @@ function DiffView({
   onSelectionChange,
   onContextMenu,
 }: DiffViewProps) {
-  if (!patch) return <div className="placeholder">Select a file to review changes.</div>
+  if (!patch) return null
   const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
   const isNewFile = parsed.header.some(
     (line) => line === '--- /dev/null' || line === 'new file mode 100644',
