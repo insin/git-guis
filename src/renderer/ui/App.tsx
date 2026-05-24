@@ -875,6 +875,8 @@ function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
             </select>
           </label>
 
+          <span className="label">Options</span>
+
           <label className="push-option">
             <input
               checked={state.force}

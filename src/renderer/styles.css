@@ -573,7 +573,8 @@ input:not([type="checkbox"]) {
   @apply grid gap-1;
 }
 
-.push-dialog-body label span {
+.push-dialog-body label span,
+.push-dialog-body span.label {
   color: var(--muted);
 }
 
