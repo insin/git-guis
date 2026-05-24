@@ -19,13 +19,22 @@ function gitRoot(cwd) {
 function macAppPath() {
   if (process.env.GIT_GUIS_APP) return process.env.GIT_GUIS_APP
 
+  const packagedApp = path.resolve(__dirname, '..', '..', '..')
   const candidates = [
+    packagedApp,
     '/Applications/Git Guis.app',
     path.join(os.homedir(), 'Applications', 'Git Guis.app'),
     path.resolve(__dirname, '..', 'out', 'Git Guis-darwin-arm64', 'Git Guis.app'),
   ]
 
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
+  return candidates.find((candidate) => isMacAppBundle(candidate)) ?? null
+}
+
+function isMacAppBundle(candidate) {
+  return (
+    candidate.endsWith(`${appName}.app`) &&
+    fs.existsSync(path.join(candidate, 'Contents', 'MacOS', appName))
+  )
 }
 
 function openMac(repoPath) {

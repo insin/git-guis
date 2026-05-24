@@ -23,11 +23,17 @@ runtime even if that variable is set in your shell.
 
 ## Command Line Helper
 
-Link the local `ggs` helper into your shell:
+From the packaged app, use:
 
-```sh
-npm link
+```text
+Git Guis > Install Terminal Helper
 ```
+
+That installs `ggs` as a symlink into the first writable location from:
+
+- `/opt/homebrew/bin`
+- `/usr/local/bin`
+- `~/.local/bin`
 
 Then run it from inside any Git repository:
 
@@ -42,9 +48,17 @@ adds or focuses that repository tab. You can also pass a path:
 ggs ../some-repo
 ```
 
+For source checkout development, you can also link the local helper into your
+shell:
+
+```sh
+npm link
+```
+
 On macOS the helper looks for `Git Guis.app` in `/Applications`,
-`~/Applications`, then the local Forge package output. You can override that
-with:
+`~/Applications`, then the local Forge package output. When installed from a
+packaged app it launches the app bundle that contains the helper. You can
+override that with:
 
 ```sh
 GIT_GUIS_APP="/path/to/Git Guis.app" ggs

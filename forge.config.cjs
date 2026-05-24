@@ -7,6 +7,7 @@ module.exports = {
     appCategoryType: 'public.app-category.developer-tools',
     asar: true,
     executableName: 'Git Guis',
+    extraResource: [path.join(__dirname, 'bin')],
     icon: path.join(__dirname, 'assets', 'icon'),
     name: 'Git Guis',
   },

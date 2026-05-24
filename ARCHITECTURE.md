@@ -193,6 +193,11 @@ This means command-line open/focus behavior crosses every Electron boundary:
 
 CLI -> main process argv -> single-instance event -> preload listener -> React.
 
+The packaged app includes `bin/ggs` as an unpacked Forge `extraResource`, because
+shells cannot execute a script from inside `app.asar`. The native app menu item
+`Git Guis > Install Terminal Helper` is main-process code: it finds a writable
+shell bin directory, then symlinks that bundled helper to `ggs`.
+
 ## When To Use Main, Preload, Or Renderer
 
 Use the renderer for:

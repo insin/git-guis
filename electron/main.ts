@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 
 import {
@@ -7,6 +8,7 @@ import {
   ipcMain,
   Menu,
   type MenuItemConstructorOptions,
+  type MessageBoxOptions,
   nativeTheme,
   type OpenDialogOptions,
   shell,
@@ -20,6 +22,7 @@ const git = new GitService()
 let mainWindow: BrowserWindow | null = null
 let currentTheme: ThemeName = 'system'
 const pendingRepositoryPaths = new Set<string>()
+const terminalHelperCommand = 'ggs'
 
 const themeLabels: Record<ThemeName, string> = {
   system: 'System',
@@ -44,6 +47,78 @@ function themeMenuItems(): MenuItemConstructorOptions[] {
   }))
 }
 
+function showNativeMessage(options: MessageBoxOptions) {
+  return mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options)
+}
+
+function terminalHelperSourcePath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', terminalHelperCommand)
+    : path.join(app.getAppPath(), 'bin', terminalHelperCommand)
+}
+
+function writableTerminalHelperDirectory() {
+  for (const directory of ['/opt/homebrew/bin', '/usr/local/bin']) {
+    try {
+      if (fs.existsSync(directory)) {
+        fs.accessSync(directory, fs.constants.W_OK)
+        return directory
+      }
+    } catch {
+      // Try the next common shell bin directory.
+    }
+  }
+
+  const localBin = path.join(app.getPath('home'), '.local/bin')
+  fs.mkdirSync(localBin, { recursive: true })
+  return localBin
+}
+
+function lstatIfPresent(filePath: string) {
+  try {
+    return fs.lstatSync(filePath)
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
+  }
+}
+
+async function installTerminalHelper() {
+  try {
+    const sourcePath = terminalHelperSourcePath()
+    const targetPath = path.join(writableTerminalHelperDirectory(), terminalHelperCommand)
+
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`Could not find terminal helper at ${sourcePath}.`)
+    }
+
+    const target = lstatIfPresent(targetPath)
+    if (target) {
+      if (!target.isSymbolicLink()) {
+        throw new Error(`${targetPath} already exists and is not a symlink.`)
+      }
+      fs.unlinkSync(targetPath)
+    }
+
+    fs.symlinkSync(sourcePath, targetPath)
+
+    await showNativeMessage({
+      buttons: ['OK'],
+      message: `Installed ${terminalHelperCommand} at ${targetPath}.`,
+      type: 'info',
+    })
+  } catch (error) {
+    await showNativeMessage({
+      buttons: ['OK'],
+      detail: error instanceof Error ? error.message : String(error),
+      message: 'Could not install the terminal helper.',
+      type: 'error',
+    })
+  }
+}
+
 function buildApplicationMenu() {
   const isMac = process.platform === 'darwin'
   const template: MenuItemConstructorOptions[] = [
@@ -55,6 +130,10 @@ function buildApplicationMenu() {
               { role: 'about' },
               { type: 'separator' },
               { label: 'Theme', submenu: themeMenuItems() },
+              {
+                label: 'Install Terminal Helper',
+                click: () => void installTerminalHelper(),
+              },
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
