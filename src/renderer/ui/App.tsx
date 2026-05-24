@@ -460,6 +460,11 @@ export function App() {
     updateDraft(tab.id, result.data)
   }
 
+  const clearUnchangedAmendMessage = async (tab: RepoTab) => {
+    const result = await window.gitApi.getLastCommitMessage(tab.path)
+    if (result.ok && result.data === tab.commitDraft) updateDraft(tab.id, '')
+  }
+
   const updateDraft = (tabId: string, value: string) => {
     setTabs((current) =>
       current.map((tab) => {
@@ -550,6 +555,7 @@ export function App() {
             )
             void refreshTab(activeTab.id, undefined, amend)
             if (amend && !activeTab.commitDraft.trim()) void loadAmendMessage(activeTab)
+            if (!amend && activeTab.commitDraft) void clearUnchangedAmendMessage(activeTab)
           }}
         />
       ) : (
