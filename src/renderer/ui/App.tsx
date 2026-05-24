@@ -900,6 +900,7 @@ function RepositoryView({
     () => (tab.diff?.kind === 'text' ? parseUnifiedDiff(tab.diff.patch).hunks : []),
     [tab.diff],
   )
+  const diffIsNewFile = tab.diff?.kind === 'text' && isNewFilePatch(tab.diff.patch)
   const diffTitle =
     tab.selectedPane === 'staged'
       ? tab.amend
@@ -1029,13 +1030,15 @@ function RepositoryView({
                   >
                     {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
                   </button>
-                  <button
-                    disabled={!contextMenu.selection}
-                    onClick={() => runMenuAction(() => onCopySelectedDiff(contextMenu.selection))}
-                    type="button"
-                  >
-                    Copy Diff
-                  </button>
+                  {!diffIsNewFile && (
+                    <button
+                      disabled={!contextMenu.selection}
+                      onClick={() => runMenuAction(() => onCopySelectedDiff(contextMenu.selection))}
+                      type="button"
+                    >
+                      Copy Diff
+                    </button>
+                  )}
                   <button
                     disabled={contextMenu.hunkIndex === null}
                     onClick={() =>
@@ -1668,9 +1671,7 @@ function DiffView({
 }: DiffViewProps) {
   if (!patch) return null
   const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
-  const isNewFile = parsed.header.some(
-    (line) => line === '--- /dev/null' || line === 'new file mode 100644',
-  )
+  const isNewFile = isNewFilePatch(patch)
 
   return (
     <pre
@@ -1750,7 +1751,9 @@ function DiffLine({
       data-line-number={lineNumber}
       data-visible-line={line.visibleLine}
     >
-      <span className="diff-marker">{markerForLine(line.kind)}</span>
+      <span className="diff-marker">
+        {isNewFile && line.kind === 'add' ? ' ' : markerForLine(line.kind)}
+      </span>
       <span className="diff-code">{line.text || ' '}</span>
     </div>
   )
@@ -1788,6 +1791,11 @@ function lineClass(kind: ParsedDiffLine['kind'], isNewFile = false) {
   if (kind === 'del') return 'line-del'
   if (kind === 'meta') return 'line-file-meta'
   return 'line-context'
+}
+
+function isNewFilePatch(patch: string) {
+  const parsed = parseUnifiedDiff(patch)
+  return parsed.header.some((line) => line === '--- /dev/null' || line === 'new file mode 100644')
 }
 
 function isRefreshShortcut(event: KeyboardEvent) {

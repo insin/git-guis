@@ -94,6 +94,9 @@ export function buildSelectionPatch(patch: string, selection: DiffLineSelection 
 export function selectedDiffText(patch: string, selection: DiffLineSelection | null) {
   if (!selection) return null
   const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
+  const isNewFile = parsed.header.some(
+    (line) => line === '--- /dev/null' || line === 'new file mode 100644',
+  )
   const start = Math.min(selection.start, selection.end)
   const end = Math.max(selection.start, selection.end)
   const lines = parsed.hunks.flatMap((hunk) =>
@@ -102,7 +105,7 @@ export function selectedDiffText(patch: string, selection: DiffLineSelection | n
         (line) =>
           line.visibleLine !== undefined && line.visibleLine >= start && line.visibleLine <= end,
       )
-      .map(renderLine),
+      .map((line) => (isNewFile && line.kind === 'add' ? line.text : renderLine(line))),
   )
 
   return lines.length > 0 ? lines.join('\n') : null
