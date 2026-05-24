@@ -536,14 +536,6 @@ input:not([type="checkbox"]) {
   @apply flex flex-col;
 }
 
-.commit-toolbar {
-  @apply mb-1.5 flex flex-none items-center gap-4;
-}
-
-.commit-toolbar label {
-  @apply ml-auto flex items-center gap-2;
-}
-
 .commit-browser-toggle {
   @apply inline-flex items-center border-0 bg-transparent p-1;
   color: var(--muted);
@@ -561,10 +553,27 @@ input:not([type="checkbox"]) {
 }
 
 .commit-actions {
-  @apply flex flex-col gap-1;
+  @apply flex flex-col justify-end gap-1;
 }
 
-.commit-grid textarea {
+.commit-message-field {
+  @apply grid min-h-0 gap-1;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.commit-message-header {
+  @apply flex items-center justify-between gap-4;
+}
+
+.commit-message-controls {
+  @apply flex items-center gap-2;
+}
+
+.commit-message-controls label {
+  @apply flex items-center gap-2;
+}
+
+.commit-message-field textarea {
   @apply h-full min-h-0 resize-none p-2;
   background: var(--editor-bg);
   border: 1px solid var(--border);

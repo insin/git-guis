@@ -1070,35 +1070,37 @@ function CommitEditor({
   onToggleCommitBrowser,
 }: CommitEditorProps) {
   return (
-    <>
-      <div className="commit-toolbar">
-        <span>Commit Message:</span>
-        <label>
-          <input
-            type="checkbox"
-            checked={amend}
-            onChange={(event) => onAmendChange(event.target.checked)}
-          />
-          Amend Last Commit
-        </label>
-        <button
-          aria-pressed={showCommitBrowser}
-          className={`commit-browser-toggle ${showCommitBrowser ? 'active' : ''}`}
-          onClick={onToggleCommitBrowser}
-          title={showCommitBrowser ? 'Hide branch picker' : 'Show branch picker'}
-          type="button"
-        >
-          <GitBranch aria-hidden size={14} strokeWidth={2.1} />
+    <div className="commit-grid">
+      <div className="commit-actions">
+        <button onClick={onCommit} type="button">
+          Commit
+        </button>
+        <button onClick={onPush} type="button">
+          Push
         </button>
       </div>
-      <div className="commit-grid">
-        <div className="commit-actions">
-          <button onClick={onCommit} type="button">
-            Commit
-          </button>
-          <button onClick={onPush} type="button">
-            Push
-          </button>
+      <div className="commit-message-field">
+        <div className="commit-message-header">
+          <span>Commit Message:</span>
+          <div className="commit-message-controls">
+            <label>
+              <input
+                type="checkbox"
+                checked={amend}
+                onChange={(event) => onAmendChange(event.target.checked)}
+              />
+              Amend Last Commit
+            </label>
+            <button
+              aria-pressed={showCommitBrowser}
+              className={`commit-browser-toggle ${showCommitBrowser ? 'active' : ''}`}
+              onClick={onToggleCommitBrowser}
+              title={showCommitBrowser ? 'Hide branch picker' : 'Show branch picker'}
+              type="button"
+            >
+              <GitBranch aria-hidden size={14} strokeWidth={2.1} />
+            </button>
+          </div>
         </div>
         <textarea
           value={draft}
@@ -1106,7 +1108,7 @@ function CommitEditor({
           spellCheck
         />
       </div>
-    </>
+    </div>
   )
 }
 
