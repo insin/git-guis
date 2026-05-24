@@ -12,7 +12,7 @@ import {
   shell,
 } from 'electron'
 
-import type { ThemeName } from '../src/shared/types.js'
+import type { PushOptions, ThemeName } from '../src/shared/types.js'
 import { GitService } from './services/gitService.js'
 
 const git = new GitService()
@@ -242,6 +242,11 @@ ipcMain.handle('git:applyPatch', (_event, repoPath: string, patch: string, rever
 )
 ipcMain.handle('git:commit', (_event, repoPath: string, message: string, amend: boolean) =>
   git.commit(repoPath, message, amend),
+)
+ipcMain.handle('git:listBranches', (_event, repoPath: string) => git.listBranches(repoPath))
+ipcMain.handle('git:listRemotes', (_event, repoPath: string) => git.listRemotes(repoPath))
+ipcMain.handle('git:push', (_event, repoPath: string, options: PushOptions) =>
+  git.push(repoPath, options),
 )
 ipcMain.handle('git:getLastCommitMessage', (_event, repoPath: string) =>
   git.getLastCommitMessage(repoPath),

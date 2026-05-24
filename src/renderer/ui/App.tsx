@@ -37,6 +37,20 @@ type RepoTab = {
   message: string
 }
 
+type PushDialogState = {
+  repoId: string
+  repoPath: string
+  remotes: string[]
+  remote: string
+  branches: string[]
+  branch: string
+  force: boolean
+  forceWithLease: boolean
+  includeTags: boolean
+  pushing: boolean
+  error: string | null
+}
+
 const TABS_KEY = 'git-guis.tabs'
 const ACTIVE_TAB_KEY = 'git-guis.activeTab'
 const PREFS_KEY = 'git-guis.preferences'
@@ -54,6 +68,7 @@ export function App() {
   const [tabs, setTabs] = useState<RepoTab[]>(() => loadInitialTabs())
   const [activeTabId, setActiveTabId] = useState<string | null>(() => loadInitialActiveTabId(tabs))
   const [prefs, setPrefs] = useState<Preferences>(() => loadJson(PREFS_KEY, defaultPrefs))
+  const [pushDialog, setPushDialog] = useState<PushDialogState | null>(null)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
 
   useEffect(() => {
@@ -367,6 +382,72 @@ export function App() {
     await refreshTab(tab.id, undefined, false)
   }
 
+  const openPushDialog = async (tab: RepoTab) => {
+    const [branchesResult, remotesResult] = await Promise.all([
+      tryGitResult(() => window.gitApi.listBranches(tab.path)),
+      tryGitResult(() => window.gitApi.listRemotes(tab.path)),
+    ])
+    if (!branchesResult.ok || !branchesResult.data) {
+      showMessage(tab.id, branchesResult.error ?? 'Unable to list branches.')
+      return
+    }
+    if (!remotesResult.ok || !remotesResult.data) {
+      showMessage(tab.id, remotesResult.error ?? 'Unable to list remotes.')
+      return
+    }
+
+    const branch =
+      (tab.status?.branch && branchesResult.data.includes(tab.status.branch)
+        ? tab.status.branch
+        : null) ??
+      branchesResult.data[0] ??
+      ''
+    const remote =
+      (remotesResult.data.includes('origin') ? 'origin' : null) ?? remotesResult.data[0] ?? ''
+
+    setPushDialog({
+      repoId: tab.id,
+      repoPath: tab.path,
+      remotes: remotesResult.data,
+      remote,
+      branches: branchesResult.data,
+      branch,
+      force: false,
+      forceWithLease: true,
+      includeTags: false,
+      pushing: false,
+      error: null,
+    })
+  }
+
+  const submitPush = async () => {
+    if (!pushDialog?.branch) return
+    setPushDialog((current) => (current ? { ...current, pushing: true, error: null } : current))
+
+    const result = await tryGitResult(() =>
+      window.gitApi.push(pushDialog.repoPath, {
+        remote: pushDialog.remote,
+        branch: pushDialog.branch,
+        force: pushDialog.force,
+        forceWithLease: pushDialog.forceWithLease,
+        includeTags: pushDialog.includeTags,
+      }),
+    )
+
+    if (!result.ok) {
+      setPushDialog((current) =>
+        current ? { ...current, pushing: false, error: result.error ?? 'Push failed.' } : current,
+      )
+      return
+    }
+
+    setPushDialog(null)
+    showMessage(
+      pushDialog.repoId,
+      result.data?.trim() || `Pushed ${pushDialog.branch} to ${pushDialog.remote}.`,
+    )
+  }
+
   const loadAmendMessage = async (tab: RepoTab) => {
     const result = await window.gitApi.getLastCommitMessage(tab.path)
     if (!result.ok || result.data === undefined) {
@@ -459,6 +540,7 @@ export function App() {
           }
           onDraftChange={(value) => updateDraft(activeTab.id, value)}
           onCommit={() => commit(activeTab)}
+          onPush={() => openPushDialog(activeTab)}
           onAmendChange={(amend) => {
             setTabs((current) =>
               current.map((tab) => (tab.id === activeTab.id ? { ...tab, amend } : tab)),
@@ -473,6 +555,17 @@ export function App() {
             Open Repository
           </button>
         </section>
+      )}
+
+      {pushDialog && (
+        <PushDialog
+          state={pushDialog}
+          onChange={(update) =>
+            setPushDialog((current) => (current ? { ...current, ...update } : current))
+          }
+          onCancel={() => setPushDialog(null)}
+          onSubmit={submitPush}
+        />
       )}
     </main>
   )
@@ -490,6 +583,7 @@ type RepositoryViewProps = {
   onSelectedLines(range: DiffLineSelection | null): void
   onDraftChange(value: string): void
   onCommit(): void
+  onPush(): void
   onAmendChange(amend: boolean): void
 }
 
@@ -512,6 +606,7 @@ function RepositoryView({
   onSelectedLines,
   onDraftChange,
   onCommit,
+  onPush,
   onAmendChange,
 }: RepositoryViewProps) {
   const hunks = useMemo(
@@ -693,9 +788,14 @@ function RepositoryView({
                 </label>
               </div>
               <div className="commit-grid">
-                <button onClick={onCommit} type="button">
-                  Commit
-                </button>
+                <div className="commit-actions">
+                  <button onClick={onCommit} type="button">
+                    Commit
+                  </button>
+                  <button onClick={onPush} type="button">
+                    Push
+                  </button>
+                </div>
                 <textarea
                   value={tab.commitDraft}
                   onChange={(event) => onDraftChange(event.target.value)}
@@ -708,6 +808,107 @@ function RepositoryView({
       </Group>
       <div className="status-bar">{tab.message}</div>
     </section>
+  )
+}
+
+type PushDialogProps = {
+  state: PushDialogState
+  onChange(update: Partial<PushDialogState>): void
+  onCancel(): void
+  onSubmit(): void
+}
+
+function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
+  return (
+    <div className="modal-backdrop">
+      <form
+        className="push-dialog"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit()
+        }}
+      >
+        <header className="push-dialog-header">
+          <strong>Push</strong>
+          <button aria-label="Close" onClick={onCancel} type="button">
+            <X aria-hidden size={14} strokeWidth={2.25} />
+          </button>
+        </header>
+
+        <div className="push-dialog-body">
+          <label>
+            <span>Branch</span>
+            <select
+              disabled={state.pushing || state.branches.length === 0}
+              value={state.branch}
+              onChange={(event) => onChange({ branch: event.target.value, error: null })}
+            >
+              {state.branches.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Remote</span>
+            <select
+              disabled={state.pushing || state.remotes.length === 0}
+              value={state.remote}
+              onChange={(event) => onChange({ remote: event.target.value, error: null })}
+            >
+              {state.remotes.map((remote) => (
+                <option key={remote} value={remote}>
+                  {remote}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="push-option">
+            <input
+              checked={state.force}
+              disabled={state.pushing}
+              onChange={(event) => onChange({ force: event.target.checked, error: null })}
+              type="checkbox"
+            />
+            Force
+          </label>
+
+          <label className="push-option indented">
+            <input
+              checked={state.forceWithLease}
+              disabled={state.pushing}
+              onChange={(event) => onChange({ forceWithLease: event.target.checked, error: null })}
+              type="checkbox"
+            />
+            With lease (safer force)
+          </label>
+
+          <label className="push-option">
+            <input
+              checked={state.includeTags}
+              disabled={state.pushing}
+              onChange={(event) => onChange({ includeTags: event.target.checked, error: null })}
+              type="checkbox"
+            />
+            Include tags
+          </label>
+
+          {state.error && <div className="push-error">{state.error}</div>}
+        </div>
+
+        <footer className="push-dialog-actions">
+          <button disabled={state.pushing} onClick={onCancel} type="button">
+            Cancel
+          </button>
+          <button disabled={state.pushing || !state.branch} type="submit">
+            {state.pushing ? 'Pushing...' : 'Push'}
+          </button>
+        </footer>
+      </form>
+    </div>
   )
 }
 
@@ -941,6 +1142,19 @@ function primaryModifier(event: KeyboardEvent) {
 
 function isMacPlatform() {
   return navigator.platform.toLowerCase().includes('mac')
+}
+
+async function tryGitResult<T>(
+  operation: () => Promise<{ ok: boolean; data?: T; error?: string }>,
+) {
+  try {
+    return await operation()
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 function createTab(repoPath: string): RepoTab {

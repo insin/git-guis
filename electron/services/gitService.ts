@@ -6,6 +6,7 @@ import type {
   FileChange,
   GitDiff,
   GitResult,
+  PushOptions,
   RepoStatus,
   RepoValidation,
   WorktreeInfo,
@@ -156,6 +157,48 @@ export class GitService {
     return result.code === 0
       ? { ok: true, data: result.stdout }
       : { ok: false, error: result.stderr || result.stdout }
+  }
+
+  async listBranches(repoPath: string): Promise<GitResult<string[]>> {
+    try {
+      const result = await this.git(repoPath, ['branch', '--format=%(refname:short)'])
+      return {
+        ok: true,
+        data: result.stdout
+          .split('\n')
+          .map((branch) => branch.trim())
+          .filter(Boolean),
+      }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  async listRemotes(repoPath: string): Promise<GitResult<string[]>> {
+    try {
+      const result = await this.git(repoPath, ['remote'])
+      return {
+        ok: true,
+        data: result.stdout
+          .split('\n')
+          .map((remote) => remote.trim())
+          .filter(Boolean),
+      }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  async push(repoPath: string, options: PushOptions): Promise<GitResult<string>> {
+    const args = ['push', '--porcelain']
+    if (options.force) args.push(options.forceWithLease ? '--force-with-lease' : '--force')
+    if (options.includeTags) args.push('--tags')
+    args.push(options.remote, options.branch)
+
+    const result = await this.git(repoPath, args, { allowFailure: true })
+    return result.code === 0
+      ? { ok: true, data: result.stdout || result.stderr }
+      : { ok: false, error: result.stderr || result.stdout || 'Push failed.' }
   }
 
   async getLastCommitMessage(repoPath: string): Promise<GitResult<string>> {

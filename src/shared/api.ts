@@ -1,6 +1,7 @@
 import type {
   GitDiff,
   GitResult,
+  PushOptions,
   RepoStatus,
   RepoValidation,
   ThemeName,
@@ -22,6 +23,9 @@ export type GitApi = {
   revertFile(repoPath: string, filePath: string, untracked: boolean): Promise<GitResult>
   applyPatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult>
   commit(repoPath: string, message: string, amend: boolean): Promise<GitResult<string>>
+  listBranches(repoPath: string): Promise<GitResult<string[]>>
+  listRemotes(repoPath: string): Promise<GitResult<string[]>>
+  push(repoPath: string, options: PushOptions): Promise<GitResult<string>>
   getLastCommitMessage(repoPath: string): Promise<GitResult<string>>
   listWorktrees(repoPath: string): Promise<GitResult<WorktreeInfo[]>>
 }

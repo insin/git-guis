@@ -111,12 +111,14 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
 }
 
 button,
+input:not([type="checkbox"]),
 select {
   background: var(--button);
   border: 1px solid var(--border);
@@ -138,6 +140,11 @@ button:disabled {
 }
 
 select {
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+
+input:not([type="checkbox"]) {
   border-radius: 4px;
   padding: 3px 7px;
 }
@@ -514,6 +521,10 @@ select {
   grid-template-columns: 112px 1fr;
 }
 
+.commit-actions {
+  @apply flex flex-col gap-1;
+}
+
 .commit-grid textarea {
   @apply h-full min-h-0 resize-none p-2;
   background: var(--editor-bg);
@@ -522,8 +533,73 @@ select {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.commit-grid button {
+.commit-actions button {
   @apply h-7 self-start;
+  width: 100%;
+}
+
+.modal-backdrop {
+  @apply fixed inset-0 z-40 grid place-items-center;
+  background: rgb(0 0 0 / 0.34);
+}
+
+.push-dialog {
+  @apply w-[min(440px,calc(100vw-32px))] overflow-hidden;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.4);
+}
+
+.push-dialog-header {
+  @apply flex h-8 items-center justify-between px-3;
+  background: var(--panel-subtle);
+  border-bottom: 1px solid var(--border);
+}
+
+.push-dialog-header button {
+  @apply inline-flex border-0 bg-transparent p-1;
+  color: var(--muted);
+}
+
+.push-dialog-header button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.push-dialog-body {
+  @apply grid gap-2 p-3;
+}
+
+.push-dialog-body label:not(.push-option) {
+  @apply grid gap-1;
+}
+
+.push-dialog-body label span {
+  color: var(--muted);
+}
+
+.push-dialog-body input:not([type="checkbox"]),
+.push-dialog-body select {
+  width: 100%;
+}
+
+.push-option {
+  @apply flex items-center gap-2;
+  &.indented {
+    @apply ml-5.5;
+  }
+}
+
+.push-error {
+  @apply whitespace-pre-wrap p-2;
+  background: var(--del-bg);
+  color: var(--del-text);
+  border: 1px solid color-mix(in srgb, var(--del-text) 45%, transparent);
+}
+
+.push-dialog-actions {
+  @apply flex justify-end gap-2 px-3 py-2;
+  background: var(--panel-subtle);
+  border-top: 1px solid var(--border);
 }
 
 .status-bar {

@@ -17,6 +17,9 @@ const gitApi: GitApi = {
   applyPatch: (repoPath, patch, reverse) =>
     ipcRenderer.invoke('git:applyPatch', repoPath, patch, reverse),
   commit: (repoPath, message, amend) => ipcRenderer.invoke('git:commit', repoPath, message, amend),
+  listBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
+  listRemotes: (repoPath) => ipcRenderer.invoke('git:listRemotes', repoPath),
+  push: (repoPath, options) => ipcRenderer.invoke('git:push', repoPath, options),
   getLastCommitMessage: (repoPath) => ipcRenderer.invoke('git:getLastCommitMessage', repoPath),
   listWorktrees: (repoPath) => ipcRenderer.invoke('git:listWorktrees', repoPath),
 }

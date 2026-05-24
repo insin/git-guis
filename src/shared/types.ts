@@ -46,6 +46,14 @@ export type GitDiff =
 
 export type ThemeName = 'system' | 'light' | 'dark' | 'monokai'
 
+export type PushOptions = {
+  remote: string
+  branch: string
+  force: boolean
+  forceWithLease: boolean
+  includeTags: boolean
+}
+
 export type RepoValidation = {
   root: string
   branch: string | null
