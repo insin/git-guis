@@ -3,12 +3,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {
+  CommitBranch,
+  CommitSummary,
   FileChange,
   GitDiff,
   GitResult,
   PushOptions,
   RepoStatus,
   RepoValidation,
+  ResetMode,
   WorktreeInfo,
 } from '../../src/shared/types.js'
 
@@ -199,6 +202,53 @@ export class GitService {
     return result.code === 0
       ? { ok: true, data: result.stdout || result.stderr }
       : { ok: false, error: result.stderr || result.stdout || 'Push failed.' }
+  }
+
+  async listCommitBranches(repoPath: string): Promise<GitResult<CommitBranch[]>> {
+    try {
+      const result = await this.git(repoPath, [
+        'branch',
+        '--all',
+        '--format=%(refname)%1f%(refname:short)%1f%(objectname)%1f%(HEAD)%1e',
+      ])
+      return { ok: true, data: parseCommitBranches(result.stdout) }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  async listCommits(repoPath: string, ref: string): Promise<GitResult<CommitSummary[]>> {
+    try {
+      const result = await this.git(repoPath, [
+        'log',
+        '--date=short',
+        '--decorate=full',
+        '--max-count=200',
+        '--format=%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ad%x1f%D%x1e',
+        ref,
+      ])
+      return { ok: true, data: parseCommits(result.stdout) }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  async checkoutBranch(repoPath: string, branch: string): Promise<GitResult> {
+    return this.runMutation(repoPath, ['switch', branch])
+  }
+
+  async cherryPickCommit(repoPath: string, hash: string): Promise<GitResult<string>> {
+    const result = await this.git(repoPath, ['cherry-pick', hash], { allowFailure: true })
+    return result.code === 0
+      ? { ok: true, data: result.stdout || result.stderr }
+      : { ok: false, error: result.stderr || result.stdout || 'Cherry-pick failed.' }
+  }
+
+  async resetToCommit(repoPath: string, hash: string, mode: ResetMode): Promise<GitResult<string>> {
+    const result = await this.git(repoPath, ['reset', `--${mode}`, hash], { allowFailure: true })
+    return result.code === 0
+      ? { ok: true, data: result.stdout || result.stderr }
+      : { ok: false, error: result.stderr || result.stdout || 'Reset failed.' }
   }
 
   async getLastCommitMessage(repoPath: string): Promise<GitResult<string>> {
@@ -489,6 +539,76 @@ function parseWorktrees(stdout: string): WorktreeInfo[] {
 
     return info
   })
+}
+
+function parseCommitBranches(stdout: string): CommitBranch[] {
+  return stdout
+    .split('\x1e')
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [ref = '', name = '', commit = '', head = ''] = record.split('\x1f')
+      return {
+        name,
+        ref,
+        commit,
+        current: head === '*',
+        remote: ref.startsWith('refs/remotes/'),
+      }
+    })
+    .filter((branch) => branch.name && !branch.ref.endsWith('/HEAD'))
+    .sort((a, b) => Number(a.remote) - Number(b.remote) || a.name.localeCompare(b.name))
+}
+
+function parseCommits(stdout: string): CommitSummary[] {
+  return stdout
+    .split('\x1e')
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [
+        hash = '',
+        shortHash = '',
+        parents = '',
+        subject = '',
+        authorName = '',
+        authorDate = '',
+        decorations = '',
+      ] = record.split('\x1f')
+      return {
+        hash,
+        shortHash,
+        parents: parents.split(' ').filter(Boolean),
+        subject,
+        authorName,
+        authorDate,
+        refs: parseCommitRefs(decorations),
+      }
+    })
+}
+
+function parseCommitRefs(decorations: string) {
+  return decorations
+    .split(', ')
+    .map((decoratedRef) => decoratedRef.trim())
+    .filter(Boolean)
+    .map((decoratedRef) => {
+      if (decoratedRef === 'HEAD') return { type: 'head' as const, name: 'HEAD' }
+
+      const ref = decoratedRef.startsWith('HEAD -> ')
+        ? decoratedRef.slice('HEAD -> '.length)
+        : decoratedRef
+      if (ref.startsWith('tag: refs/tags/')) {
+        return { type: 'tag' as const, name: ref.slice('tag: refs/tags/'.length) }
+      }
+      if (ref.startsWith('refs/heads/')) {
+        return { type: 'branch' as const, name: ref.slice('refs/heads/'.length) }
+      }
+      if (ref.startsWith('refs/remotes/')) {
+        return { type: 'remote' as const, name: ref.slice('refs/remotes/'.length) }
+      }
+      return { type: 'branch' as const, name: ref }
+    })
 }
 
 function quotePath(filePath: string) {

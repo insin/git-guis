@@ -1,9 +1,17 @@
-import { File, FileCheck, Plus, X } from 'lucide-react'
+import { File, FileCheck, GitBranch, Plus, X } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 
-import type { FileChange, GitDiff, RepoStatus, ThemeName } from '../../shared/types'
+import type {
+  CommitBranch,
+  CommitSummary,
+  FileChange,
+  GitDiff,
+  RepoStatus,
+  ResetMode,
+  ThemeName,
+} from '../../shared/types'
 import {
   buildHunkPatch,
   buildSelectionPatch,
@@ -51,6 +59,18 @@ type PushDialogState = {
   error: string | null
 }
 
+type ResetDialogState = {
+  repoId: string
+  repoPath: string
+  hash: string
+  shortHash: string
+  subject: string
+  branch: string
+  mode: ResetMode
+  resetting: boolean
+  error: string | null
+}
+
 const TABS_KEY = 'git-guis.tabs'
 const ACTIVE_TAB_KEY = 'git-guis.activeTab'
 const PREFS_KEY = 'git-guis.preferences'
@@ -58,6 +78,8 @@ const DRAFT_KEY = 'git-guis.drafts'
 const WORKSPACE_LAYOUT_KEY = 'git-guis.layout.workspace'
 const FILE_LIST_LAYOUT_KEY = 'git-guis.layout.file-list'
 const RIGHT_PANE_LAYOUT_KEY = 'git-guis.layout.right-pane'
+const COMMIT_AREA_LAYOUT_KEY = 'git-guis.layout.commit-area'
+const COMMIT_BROWSER_VISIBLE_KEY = 'git-guis.commit-browser.visible'
 
 const defaultPrefs: Preferences = {
   theme: 'system',
@@ -68,7 +90,11 @@ export function App() {
   const [tabs, setTabs] = useState<RepoTab[]>(() => loadInitialTabs())
   const [activeTabId, setActiveTabId] = useState<string | null>(() => loadInitialActiveTabId(tabs))
   const [prefs, setPrefs] = useState<Preferences>(() => loadJson(PREFS_KEY, defaultPrefs))
+  const [showCommitBrowser, setShowCommitBrowser] = useState(() =>
+    loadJson(COMMIT_BROWSER_VISIBLE_KEY, false),
+  )
   const [pushDialog, setPushDialog] = useState<PushDialogState | null>(null)
+  const [resetDialog, setResetDialog] = useState<ResetDialogState | null>(null)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
 
   useEffect(() => {
@@ -93,6 +119,10 @@ export function App() {
   useEffect(() => {
     saveJson(ACTIVE_TAB_KEY, activeTab?.path ?? null)
   }, [activeTab?.path])
+
+  useEffect(() => {
+    saveJson(COMMIT_BROWSER_VISIBLE_KEY, showCommitBrowser)
+  }, [showCommitBrowser])
 
   useEffect(() => {
     for (const tab of tabs) {
@@ -451,6 +481,76 @@ export function App() {
     )
   }
 
+  const checkoutBranch = async (tab: RepoTab, branch: CommitBranch) => {
+    if (branch.remote) return
+    const result = await window.gitApi.checkoutBranch(tab.path, branch.name)
+    if (!result.ok) {
+      showMessage(tab.id, result.error ?? 'Checkout failed.')
+      return
+    }
+    await refreshTab(tab.id)
+    showMessage(tab.id, `Checked out ${branch.name}.`)
+  }
+
+  const cherryPickCommit = async (tab: RepoTab, commit: CommitSummary) => {
+    const result = await window.gitApi.cherryPickCommit(tab.path, commit.hash)
+    if (!result.ok) {
+      showMessage(tab.id, result.error ?? 'Cherry-pick failed.')
+      return
+    }
+    await refreshTab(tab.id)
+    showMessage(tab.id, result.data?.trim() || `Cherry-picked ${commit.shortHash}.`)
+  }
+
+  const openResetDialog = (tab: RepoTab, commit: CommitSummary) => {
+    setResetDialog({
+      repoId: tab.id,
+      repoPath: tab.path,
+      hash: commit.hash,
+      shortHash: commit.shortHash,
+      subject: commit.subject,
+      branch: tab.status?.branch ?? 'HEAD',
+      mode: 'mixed',
+      resetting: false,
+      error: null,
+    })
+  }
+
+  const submitReset = async () => {
+    if (!resetDialog) return
+    setResetDialog((current) => (current ? { ...current, resetting: true, error: null } : current))
+
+    const result = await window.gitApi.resetToCommit(
+      resetDialog.repoPath,
+      resetDialog.hash,
+      resetDialog.mode,
+    )
+    if (!result.ok) {
+      setResetDialog((current) =>
+        current
+          ? { ...current, resetting: false, error: result.error ?? 'Reset failed.' }
+          : current,
+      )
+      return
+    }
+
+    const repoId = resetDialog.repoId
+    const shortHash = resetDialog.shortHash
+    const mode = resetDialog.mode
+    setResetDialog(null)
+    await refreshTab(repoId)
+    showMessage(repoId, result.data?.trim() || `Reset ${mode} to ${shortHash}.`)
+  }
+
+  const copyHash = async (tab: RepoTab, hash: string) => {
+    try {
+      await copyText(hash)
+      showMessage(tab.id, 'Copied commit hash.')
+    } catch (error) {
+      showMessage(tab.id, error instanceof Error ? error.message : 'Unable to copy commit hash.')
+    }
+  }
+
   const loadAmendMessage = async (tab: RepoTab) => {
     const result = await window.gitApi.getLastCommitMessage(tab.path)
     if (!result.ok || result.data === undefined) {
@@ -531,6 +631,8 @@ export function App() {
         <RepositoryView
           tab={activeTab}
           prefs={prefs}
+          showCommitBrowser={showCommitBrowser}
+          onToggleCommitBrowser={() => setShowCommitBrowser((visible) => !visible)}
           onRefresh={() => refreshTab(activeTab.id)}
           onSelect={(pane, change) =>
             loadDiff(activeTab.id, activeTab.path, change.path, pane, activeTab.amend)
@@ -549,6 +651,10 @@ export function App() {
           onDraftChange={(value) => updateDraft(activeTab.id, value)}
           onCommit={() => commit(activeTab)}
           onPush={() => openPushDialog(activeTab)}
+          onCheckoutBranch={(branch) => checkoutBranch(activeTab, branch)}
+          onCherryPickCommit={(commit) => cherryPickCommit(activeTab, commit)}
+          onResetToCommit={(commit) => openResetDialog(activeTab, commit)}
+          onCopyCommitHash={(hash) => copyHash(activeTab, hash)}
           onAmendChange={(amend) => {
             setTabs((current) =>
               current.map((tab) => (tab.id === activeTab.id ? { ...tab, amend } : tab)),
@@ -576,6 +682,17 @@ export function App() {
           onSubmit={submitPush}
         />
       )}
+
+      {resetDialog && (
+        <ResetDialog
+          state={resetDialog}
+          onChange={(update) =>
+            setResetDialog((current) => (current ? { ...current, ...update } : current))
+          }
+          onCancel={() => setResetDialog(null)}
+          onSubmit={submitReset}
+        />
+      )}
     </main>
   )
 }
@@ -583,6 +700,8 @@ export function App() {
 type RepositoryViewProps = {
   tab: RepoTab
   prefs: Preferences
+  showCommitBrowser: boolean
+  onToggleCommitBrowser(): void
   onRefresh(): void
   onSelect(pane: Pane, change: FileChange): void
   onToggleStage(): void
@@ -593,6 +712,10 @@ type RepositoryViewProps = {
   onDraftChange(value: string): void
   onCommit(): void
   onPush(): void
+  onCheckoutBranch(branch: CommitBranch): void
+  onCherryPickCommit(commit: CommitSummary): void
+  onResetToCommit(commit: CommitSummary): void
+  onCopyCommitHash(hash: string): void
   onAmendChange(amend: boolean): void
 }
 
@@ -606,6 +729,8 @@ type DiffContextMenu = {
 function RepositoryView({
   tab,
   prefs,
+  showCommitBrowser,
+  onToggleCommitBrowser,
   onRefresh,
   onSelect,
   onToggleStage,
@@ -616,6 +741,10 @@ function RepositoryView({
   onDraftChange,
   onCommit,
   onPush,
+  onCheckoutBranch,
+  onCherryPickCommit,
+  onResetToCommit,
+  onCopyCommitHash,
   onAmendChange,
 }: RepositoryViewProps) {
   const hunks = useMemo(
@@ -724,7 +853,11 @@ function RepositoryView({
                     onContextMenu={(event, hunkIndex, selection) => {
                       event.preventDefault()
                       event.stopPropagation()
-                      setContextMenu({ x: event.clientX, y: event.clientY, hunkIndex, selection })
+                      setContextMenu({
+                        ...clampedMenuPosition(event.clientX, event.clientY, 180, 190),
+                        hunkIndex,
+                        selection,
+                      })
                     }}
                   />
                 ) : tab.diff?.kind === 'binary' ? (
@@ -785,38 +918,134 @@ function RepositoryView({
             <Separator className="resize-handle resize-handle-vertical" id="right-pane-separator" />
 
             <Panel className="commit-panel" defaultSize="24%" id="commit" minSize={140}>
-              <div className="commit-toolbar">
-                <span>Commit Message:</span>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={tab.amend}
-                    onChange={(event) => onAmendChange(event.target.checked)}
+              {showCommitBrowser ? (
+                <Group
+                  className="commit-area-panels"
+                  defaultLayout={loadJson(COMMIT_AREA_LAYOUT_KEY, { message: 58, browser: 42 })}
+                  id="commit-area-panels"
+                  onLayoutChanged={(layout) => saveJson(COMMIT_AREA_LAYOUT_KEY, layout)}
+                  orientation="horizontal"
+                >
+                  <Panel
+                    className="commit-editor-panel"
+                    defaultSize="58%"
+                    id="message"
+                    minSize={260}
+                  >
+                    <CommitEditor
+                      amend={tab.amend}
+                      draft={tab.commitDraft}
+                      showCommitBrowser={showCommitBrowser}
+                      onAmendChange={onAmendChange}
+                      onCommit={onCommit}
+                      onDraftChange={onDraftChange}
+                      onPush={onPush}
+                      onToggleCommitBrowser={onToggleCommitBrowser}
+                    />
+                  </Panel>
+                  <Separator
+                    className="resize-handle resize-handle-horizontal"
+                    id="commit-area-separator"
                   />
-                  Amend Last Commit
-                </label>
-              </div>
-              <div className="commit-grid">
-                <div className="commit-actions">
-                  <button onClick={onCommit} type="button">
-                    Commit
-                  </button>
-                  <button onClick={onPush} type="button">
-                    Push
-                  </button>
+                  <Panel
+                    className="commit-browser-panel"
+                    defaultSize="42%"
+                    id="browser"
+                    minSize={260}
+                  >
+                    <CommitBrowser
+                      repoPath={tab.path}
+                      currentBranch={tab.status?.branch}
+                      refreshKey={tab.status?.lastRefreshedAt ?? 0}
+                      onCheckout={onCheckoutBranch}
+                      onCherryPick={onCherryPickCommit}
+                      onReset={onResetToCommit}
+                      onCopyHash={onCopyCommitHash}
+                    />
+                  </Panel>
+                </Group>
+              ) : (
+                <div className="commit-editor-panel">
+                  <CommitEditor
+                    amend={tab.amend}
+                    draft={tab.commitDraft}
+                    showCommitBrowser={showCommitBrowser}
+                    onAmendChange={onAmendChange}
+                    onCommit={onCommit}
+                    onDraftChange={onDraftChange}
+                    onPush={onPush}
+                    onToggleCommitBrowser={onToggleCommitBrowser}
+                  />
                 </div>
-                <textarea
-                  value={tab.commitDraft}
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  spellCheck
-                />
-              </div>
+              )}
             </Panel>
           </Group>
         </Panel>
       </Group>
       <div className="status-bar">{tab.message}</div>
     </section>
+  )
+}
+
+type CommitEditorProps = {
+  amend: boolean
+  draft: string
+  showCommitBrowser: boolean
+  onAmendChange(amend: boolean): void
+  onCommit(): void
+  onDraftChange(value: string): void
+  onPush(): void
+  onToggleCommitBrowser(): void
+}
+
+function CommitEditor({
+  amend,
+  draft,
+  showCommitBrowser,
+  onAmendChange,
+  onCommit,
+  onDraftChange,
+  onPush,
+  onToggleCommitBrowser,
+}: CommitEditorProps) {
+  return (
+    <>
+      <div className="commit-toolbar">
+        <span>Commit Message:</span>
+        <label>
+          <input
+            type="checkbox"
+            checked={amend}
+            onChange={(event) => onAmendChange(event.target.checked)}
+          />
+          Amend Last Commit
+        </label>
+        <button
+          aria-pressed={showCommitBrowser}
+          className={`commit-browser-toggle ${showCommitBrowser ? 'active' : ''}`}
+          onClick={onToggleCommitBrowser}
+          title={showCommitBrowser ? 'Hide branch picker' : 'Show branch picker'}
+          type="button"
+        >
+          <GitBranch aria-hidden size={14} strokeWidth={2.1} />
+        </button>
+      </div>
+      <div className="commit-grid">
+        <div className="commit-actions">
+          <button onClick={onCommit} type="button">
+            Commit
+          </button>
+          <button onClick={onPush} type="button">
+            Push
+          </button>
+        </div>
+        <textarea
+          value={draft}
+          onChange={(event) => onDraftChange(event.target.value)}
+          spellCheck
+        />
+      </div>
+    </>
   )
 }
 
@@ -921,6 +1150,290 @@ function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
       </form>
     </div>
   )
+}
+
+type ResetDialogProps = {
+  state: ResetDialogState
+  onChange(update: Partial<ResetDialogState>): void
+  onCancel(): void
+  onSubmit(): void
+}
+
+function ResetDialog({ state, onChange, onCancel, onSubmit }: ResetDialogProps) {
+  return (
+    <div className="modal-backdrop">
+      <form
+        className="push-dialog"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit()
+        }}
+      >
+        <header className="push-dialog-header">
+          <strong>Reset {state.branch}</strong>
+          <button aria-label="Close" disabled={state.resetting} onClick={onCancel} type="button">
+            <X aria-hidden size={14} strokeWidth={2.25} />
+          </button>
+        </header>
+
+        <div className="push-dialog-body">
+          <div className="reset-target">
+            <strong>{state.shortHash}</strong>
+            <span>{state.subject}</span>
+          </div>
+
+          <span className="label">Mode</span>
+          {(['soft', 'mixed', 'hard'] as ResetMode[]).map((mode) => (
+            <label className="push-option" key={mode}>
+              <input
+                checked={state.mode === mode}
+                disabled={state.resetting}
+                name="reset-mode"
+                onChange={() => onChange({ mode, error: null })}
+                type="radio"
+              />
+              {resetModeLabel(mode)}
+            </label>
+          ))}
+
+          {state.error && <div className="push-error">{state.error}</div>}
+        </div>
+
+        <footer className="push-dialog-actions">
+          <button disabled={state.resetting} onClick={onCancel} type="button">
+            Cancel
+          </button>
+          <button disabled={state.resetting} type="submit">
+            {state.resetting ? 'Resetting...' : 'OK'}
+          </button>
+        </footer>
+      </form>
+    </div>
+  )
+}
+
+function resetModeLabel(mode: ResetMode) {
+  if (mode === 'soft') return 'Soft'
+  if (mode === 'hard') return 'Hard'
+  return 'Mixed'
+}
+
+type CommitBrowserProps = {
+  repoPath: string
+  currentBranch: string | null | undefined
+  refreshKey: number
+  onCheckout(branch: CommitBranch): void
+  onCherryPick(commit: CommitSummary): void
+  onReset(commit: CommitSummary): void
+  onCopyHash(hash: string): void
+}
+
+type CommitContextMenu = {
+  x: number
+  y: number
+  commit: CommitSummary
+} | null
+
+function CommitBrowser({
+  repoPath,
+  currentBranch,
+  refreshKey,
+  onCheckout,
+  onCherryPick,
+  onReset,
+  onCopyHash,
+}: CommitBrowserProps) {
+  const [branches, setBranches] = useState<CommitBranch[]>([])
+  const [selectedRef, setSelectedRef] = useState('')
+  const [commits, setCommits] = useState<CommitSummary[]>([])
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [loadingCommits, setLoadingCommits] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<CommitContextMenu>(null)
+
+  const selectedBranch = branches.find((branch) => branch.ref === selectedRef) ?? null
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingBranches(true)
+    setError(null)
+
+    void tryGitResult(() => window.gitApi.listCommitBranches(repoPath)).then((result) => {
+      if (cancelled) return
+      setLoadingBranches(false)
+      if (!result.ok || !result.data) {
+        setError(result.error ?? 'Unable to load branches.')
+        setBranches([])
+        setSelectedRef('')
+        return
+      }
+
+      const localBranches = result.data.filter((branch) => !branch.remote)
+      setBranches(localBranches)
+      setSelectedRef((current) => {
+        if (localBranches.some((branch) => branch.ref === current)) return current
+        const currentLocal = localBranches.find(
+          (branch) => !branch.remote && branch.name === currentBranch,
+        )
+        return currentLocal?.ref ?? localBranches[0]?.ref ?? ''
+      })
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [repoPath, currentBranch, refreshKey])
+
+  useEffect(() => {
+    if (!selectedRef) {
+      setCommits([])
+      return
+    }
+
+    let cancelled = false
+    setLoadingCommits(true)
+    setError(null)
+
+    void tryGitResult(() => window.gitApi.listCommits(repoPath, selectedRef)).then((result) => {
+      if (cancelled) return
+      setLoadingCommits(false)
+      if (!result.ok || !result.data) {
+        setError(result.error ?? 'Unable to load commits.')
+        setCommits([])
+        return
+      }
+      setCommits(result.data)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [repoPath, selectedRef])
+
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const closeMenu = () => setContextMenu(null)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+
+    window.addEventListener('pointerdown', closeMenu)
+    window.addEventListener('blur', closeMenu)
+    window.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      window.removeEventListener('pointerdown', closeMenu)
+      window.removeEventListener('blur', closeMenu)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [contextMenu])
+
+  const runMenuAction = (action: () => void) => {
+    setContextMenu(null)
+    action()
+  }
+
+  return (
+    <section className="commit-browser">
+      <div className="commit-browser-toolbar">
+        <select
+          disabled={loadingBranches || branches.length === 0}
+          value={selectedRef}
+          onChange={(event) => setSelectedRef(event.target.value)}
+        >
+          {branches.map((branch) => (
+            <option key={branch.ref} value={branch.ref}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
+        <button
+          disabled={!selectedBranch || selectedBranch.remote || selectedBranch.current}
+          onClick={() => selectedBranch && onCheckout(selectedBranch)}
+          type="button"
+        >
+          Check Out
+        </button>
+      </div>
+
+      <div className="commit-list">
+        {error ? (
+          <div className="empty-list">{error}</div>
+        ) : loadingCommits ? (
+          <div className="empty-list">Loading commits...</div>
+        ) : commits.length === 0 ? (
+          <div className="empty-list">No commits</div>
+        ) : (
+          commits.map((commit) => (
+            <button
+              className="commit-row"
+              key={commit.hash}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setContextMenu({
+                  ...clampedMenuPosition(event.clientX, event.clientY, 210, 118),
+                  commit,
+                })
+              }}
+              title={commit.hash}
+              type="button"
+            >
+              <CommitRow commit={commit} />
+            </button>
+          ))
+        )}
+      </div>
+
+      {contextMenu && (
+        <div
+          className="context-menu"
+          onPointerDown={(event) => event.stopPropagation()}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => runMenuAction(() => onCherryPick(contextMenu.commit))}
+            type="button"
+          >
+            Cherry-pick this commit
+          </button>
+          <button onClick={() => runMenuAction(() => onReset(contextMenu.commit))} type="button">
+            Reset {currentBranch ?? 'HEAD'} to here
+          </button>
+          <button
+            onClick={() => runMenuAction(() => onCopyHash(contextMenu.commit.hash))}
+            type="button"
+          >
+            Copy commit hash
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CommitRow({ commit }: { commit: CommitSummary }) {
+  const refs = visibleCommitRefs(commit)
+  return (
+    <>
+      <span className="commit-subject">{commit.subject}</span>
+      <span className="commit-date">{commit.authorDate}</span>
+      {refs.length > 0 && (
+        <span className="commit-refs">
+          {refs.map((ref) => (
+            <span className={`commit-ref ${ref.type}`} key={`${commit.hash}-${ref.name}`}>
+              {ref.name}
+            </span>
+          ))}
+        </span>
+      )}
+    </>
+  )
+}
+
+function visibleCommitRefs(commit: CommitSummary) {
+  return commit.refs.filter((ref) => ref.type === 'branch' || ref.type === 'tag')
 }
 
 type FileListProps = {
@@ -1165,6 +1678,31 @@ async function tryGitResult<T>(
       ok: false,
       error: error instanceof Error ? error.message : String(error),
     }
+  }
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const input = document.createElement('textarea')
+  input.value = value
+  input.style.position = 'fixed'
+  input.style.opacity = '0'
+  document.body.append(input)
+  input.select()
+  const copied = document.execCommand('copy')
+  input.remove()
+  if (!copied) throw new Error('Unable to copy commit hash.')
+}
+
+function clampedMenuPosition(x: number, y: number, width: number, height: number) {
+  const margin = 8
+  return {
+    x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
+    y: Math.max(margin, Math.min(y, window.innerHeight - height - margin)),
   }
 }
 

@@ -20,6 +20,12 @@ const gitApi: GitApi = {
   listBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
   listRemotes: (repoPath) => ipcRenderer.invoke('git:listRemotes', repoPath),
   push: (repoPath, options) => ipcRenderer.invoke('git:push', repoPath, options),
+  listCommitBranches: (repoPath) => ipcRenderer.invoke('git:listCommitBranches', repoPath),
+  listCommits: (repoPath, ref) => ipcRenderer.invoke('git:listCommits', repoPath, ref),
+  checkoutBranch: (repoPath, branch) => ipcRenderer.invoke('git:checkoutBranch', repoPath, branch),
+  cherryPickCommit: (repoPath, hash) => ipcRenderer.invoke('git:cherryPickCommit', repoPath, hash),
+  resetToCommit: (repoPath, hash, mode) =>
+    ipcRenderer.invoke('git:resetToCommit', repoPath, hash, mode),
   getLastCommitMessage: (repoPath) => ipcRenderer.invoke('git:getLastCommitMessage', repoPath),
   listWorktrees: (repoPath) => ipcRenderer.invoke('git:listWorktrees', repoPath),
 }

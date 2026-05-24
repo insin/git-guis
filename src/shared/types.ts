@@ -54,6 +54,31 @@ export type PushOptions = {
   includeTags: boolean
 }
 
+export type CommitBranch = {
+  name: string
+  ref: string
+  commit: string
+  current: boolean
+  remote: boolean
+}
+
+export type CommitRef = {
+  type: 'branch' | 'remote' | 'tag' | 'head'
+  name: string
+}
+
+export type CommitSummary = {
+  hash: string
+  shortHash: string
+  parents: string[]
+  subject: string
+  authorName: string
+  authorDate: string
+  refs: CommitRef[]
+}
+
+export type ResetMode = 'soft' | 'mixed' | 'hard'
+
 export type RepoValidation = {
   root: string
   branch: string | null

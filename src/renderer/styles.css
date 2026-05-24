@@ -504,8 +504,21 @@ input:not([type="checkbox"]) {
 }
 
 .commit-panel {
-  @apply flex flex-col px-2 py-1.5;
+  @apply flex flex-col;
   background: var(--panel-subtle);
+}
+
+.commit-area-panels {
+  @apply h-full min-h-0;
+}
+
+.commit-editor-panel,
+.commit-browser-panel {
+  @apply h-full min-h-0 overflow-hidden px-2 py-1.5;
+}
+
+.commit-editor-panel {
+  @apply flex flex-col;
 }
 
 .commit-toolbar {
@@ -514,6 +527,17 @@ input:not([type="checkbox"]) {
 
 .commit-toolbar label {
   @apply ml-auto flex items-center gap-2;
+}
+
+.commit-browser-toggle {
+  @apply inline-flex items-center border-0 bg-transparent p-1;
+  color: var(--muted);
+}
+
+.commit-browser-toggle:hover,
+.commit-browser-toggle.active {
+  background: var(--selection);
+  color: var(--selection-text);
 }
 
 .commit-grid {
@@ -536,6 +560,95 @@ input:not([type="checkbox"]) {
 .commit-actions button {
   @apply h-7 self-start;
   width: 100%;
+}
+
+.commit-browser {
+  @apply flex h-full min-h-0 flex-col gap-1.5;
+}
+
+.commit-browser-toolbar {
+  @apply grid flex-none gap-1.5;
+  grid-template-columns: minmax(0, 1fr) 88px;
+}
+
+.commit-browser-toolbar select,
+.commit-browser-toolbar button {
+  @apply h-7;
+}
+
+.commit-list {
+  @apply min-h-0 flex-1 overflow-auto;
+  background: var(--editor-bg);
+  border: 1px solid var(--border);
+}
+
+.commit-row {
+  @apply grid w-full items-center gap-1.5 border-0 bg-transparent px-2 py-0.5 text-left;
+  grid-template-columns: minmax(0, 1fr) 74px minmax(64px, max-content);
+  color: var(--text);
+  font-size: 12px;
+  min-height: 22px;
+}
+
+.commit-row:not(:has(.commit-refs)) {
+  grid-template-columns: minmax(0, 1fr) 74px;
+}
+
+.commit-row:hover {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.commit-subject {
+  @apply truncate;
+}
+
+.commit-date {
+  @apply text-right;
+  color: var(--muted);
+}
+
+.commit-row:hover .commit-date {
+  color: var(--selection-text);
+}
+
+.commit-refs {
+  @apply flex min-w-0 justify-end gap-1 overflow-hidden;
+}
+
+.commit-ref {
+  @apply max-w-24 truncate rounded-sm px-1;
+  background: var(--panel-subtle);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.commit-ref.branch {
+  background: color-mix(in srgb, var(--add-bg) 60%, transparent);
+  border-color: color-mix(in srgb, var(--add-text) 45%, transparent);
+  color: var(--add-text);
+}
+
+.commit-ref.remote {
+  background: color-mix(in srgb, var(--selection) 35%, transparent);
+  border-color: color-mix(in srgb, var(--selection) 70%, transparent);
+}
+
+.commit-ref.tag {
+  background: color-mix(in srgb, var(--hunk-bg) 65%, transparent);
+  border-color: color-mix(in srgb, var(--hunk-text) 45%, transparent);
+  color: var(--hunk-text);
+}
+
+.reset-target {
+  @apply grid gap-1 p-2;
+  background: var(--editor-bg);
+  border: 1px solid var(--border);
+}
+
+.reset-target span {
+  @apply truncate;
+  color: var(--muted);
 }
 
 .modal-backdrop {

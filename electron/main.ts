@@ -14,7 +14,7 @@ import {
   shell,
 } from 'electron'
 
-import type { PushOptions, ThemeName } from '../src/shared/types.js'
+import type { PushOptions, ResetMode, ThemeName } from '../src/shared/types.js'
 import { GitService } from './services/gitService.js'
 
 const git = new GitService()
@@ -326,6 +326,21 @@ ipcMain.handle('git:listBranches', (_event, repoPath: string) => git.listBranche
 ipcMain.handle('git:listRemotes', (_event, repoPath: string) => git.listRemotes(repoPath))
 ipcMain.handle('git:push', (_event, repoPath: string, options: PushOptions) =>
   git.push(repoPath, options),
+)
+ipcMain.handle('git:listCommitBranches', (_event, repoPath: string) =>
+  git.listCommitBranches(repoPath),
+)
+ipcMain.handle('git:listCommits', (_event, repoPath: string, ref: string) =>
+  git.listCommits(repoPath, ref),
+)
+ipcMain.handle('git:checkoutBranch', (_event, repoPath: string, branch: string) =>
+  git.checkoutBranch(repoPath, branch),
+)
+ipcMain.handle('git:cherryPickCommit', (_event, repoPath: string, hash: string) =>
+  git.cherryPickCommit(repoPath, hash),
+)
+ipcMain.handle('git:resetToCommit', (_event, repoPath: string, hash: string, mode: ResetMode) =>
+  git.resetToCommit(repoPath, hash, mode),
 )
 ipcMain.handle('git:getLastCommitMessage', (_event, repoPath: string) =>
   git.getLastCommitMessage(repoPath),

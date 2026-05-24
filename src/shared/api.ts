@@ -1,9 +1,12 @@
 import type {
+  CommitBranch,
+  CommitSummary,
   GitDiff,
   GitResult,
   PushOptions,
   RepoStatus,
   RepoValidation,
+  ResetMode,
   ThemeName,
   WorktreeInfo,
 } from './types.js'
@@ -26,6 +29,11 @@ export type GitApi = {
   listBranches(repoPath: string): Promise<GitResult<string[]>>
   listRemotes(repoPath: string): Promise<GitResult<string[]>>
   push(repoPath: string, options: PushOptions): Promise<GitResult<string>>
+  listCommitBranches(repoPath: string): Promise<GitResult<CommitBranch[]>>
+  listCommits(repoPath: string, ref: string): Promise<GitResult<CommitSummary[]>>
+  checkoutBranch(repoPath: string, branch: string): Promise<GitResult>
+  cherryPickCommit(repoPath: string, hash: string): Promise<GitResult<string>>
+  resetToCommit(repoPath: string, hash: string, mode: ResetMode): Promise<GitResult<string>>
   getLastCommitMessage(repoPath: string): Promise<GitResult<string>>
   listWorktrees(repoPath: string): Promise<GitResult<WorktreeInfo[]>>
 }
