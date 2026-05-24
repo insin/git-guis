@@ -18,6 +18,7 @@ import {
   type DiffLineSelection,
   type ParsedDiffLine,
   parseUnifiedDiff,
+  selectedDiffText,
   withVisibleLineNumbers,
 } from '../utils/diff'
 import { loadJson, saveJson } from '../utils/storage'
@@ -477,6 +478,22 @@ export function App() {
     await refreshTab(tab.id)
   }
 
+  const copySelectedDiff = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
+    if (tab.diff?.kind !== 'text') return
+    const text = selectedDiffText(tab.diff.patch, selection ?? tab.selectedLines)
+    if (!text) {
+      showMessage(tab.id, 'Select diff lines before copying.')
+      return
+    }
+
+    try {
+      await copyText(text)
+      showMessage(tab.id, 'Copied selected diff.')
+    } catch (error) {
+      showMessage(tab.id, error instanceof Error ? error.message : 'Unable to copy diff.')
+    }
+  }
+
   const commit = async (tab: RepoTab) => {
     const message = tab.commitDraft
     if (!message.trim()) {
@@ -770,6 +787,7 @@ export function App() {
           onRevert={() => revertSelected(activeTab)}
           onApplyHunk={(hunkIndex) => applyHunk(activeTab, hunkIndex)}
           onApplySelection={(selection) => applySelection(activeTab, selection)}
+          onCopySelectedDiff={(selection) => copySelectedDiff(activeTab, selection)}
           onSelectedLines={(range) =>
             setTabs((current) =>
               current.map((tab) =>
@@ -837,6 +855,7 @@ type RepositoryViewProps = {
   onRevert(): void
   onApplyHunk(hunkIndex: number): void
   onApplySelection(selection?: DiffLineSelection | null): void
+  onCopySelectedDiff(selection?: DiffLineSelection | null): void
   onSelectedLines(range: DiffLineSelection | null): void
   onDraftChange(value: string): void
   onCommit(): void
@@ -866,6 +885,7 @@ function RepositoryView({
   onRevert,
   onApplyHunk,
   onApplySelection,
+  onCopySelectedDiff,
   onSelectedLines,
   onDraftChange,
   onCommit,
@@ -1008,6 +1028,13 @@ function RepositoryView({
                     type="button"
                   >
                     {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
+                  </button>
+                  <button
+                    disabled={!contextMenu.selection}
+                    onClick={() => runMenuAction(() => onCopySelectedDiff(contextMenu.selection))}
+                    type="button"
+                  >
+                    Copy Diff
                   </button>
                   <button
                     disabled={contextMenu.hunkIndex === null}

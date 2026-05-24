@@ -91,6 +91,23 @@ export function buildSelectionPatch(patch: string, selection: DiffLineSelection 
   return [...parsed.header, ...selectedHunks, ''].join('\n')
 }
 
+export function selectedDiffText(patch: string, selection: DiffLineSelection | null) {
+  if (!selection) return null
+  const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
+  const start = Math.min(selection.start, selection.end)
+  const end = Math.max(selection.start, selection.end)
+  const lines = parsed.hunks.flatMap((hunk) =>
+    hunk.lines
+      .filter(
+        (line) =>
+          line.visibleLine !== undefined && line.visibleLine >= start && line.visibleLine <= end,
+      )
+      .map(renderLine),
+  )
+
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
 function renderFullHunk(hunk: ParsedHunk) {
   return [hunk.header, ...hunk.lines.map(renderLine)].join('\n')
 }
