@@ -469,6 +469,7 @@ export function App() {
 
   const applySelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
     if (tab.diff?.kind !== 'text') return
+    const selectionPreference = previousFileSelection(tab)
     const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
     if (!patch) {
       showMessage(tab.id, 'Select changed lines before applying a partial patch.')
@@ -479,7 +480,8 @@ export function App() {
       showMessage(tab.id, result.error ?? 'Patch did not apply.')
       return
     }
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
+    setShortcutScope('files')
   }
 
   const applySelectedLineShortcut = async (tab: RepoTab, pane?: Pane) => {
@@ -2045,6 +2047,12 @@ function preserveSelection(
         paths: preferredPaths.length > 0 ? preferredPaths : [preference.path],
         anchorPath: preference.anchorPath ?? preference.path,
       }
+    }
+    return {
+      path: null,
+      pane: preference.pane,
+      paths: [],
+      anchorPath: null,
     }
   }
 
