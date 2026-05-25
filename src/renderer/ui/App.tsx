@@ -1,6 +1,6 @@
 import { File, FileCheck, GitBranch, Plus, X } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 
 import type {
@@ -1437,6 +1437,12 @@ type PushDialogProps = {
 }
 
 function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
+  const submitButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    submitButtonRef.current?.focus()
+  }, [])
+
   useEffect(() => {
     if (state.pushing) return
 
@@ -1536,7 +1542,7 @@ function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
           <button disabled={state.pushing} onClick={onCancel} type="button">
             Cancel
           </button>
-          <button disabled={state.pushing || !state.branch} type="submit">
+          <button disabled={state.pushing || !state.branch} ref={submitButtonRef} type="submit">
             {state.pushing ? 'Pushing...' : 'Push'}
           </button>
         </footer>
