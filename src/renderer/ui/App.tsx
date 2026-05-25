@@ -473,6 +473,7 @@ export function App() {
     }
 
     clearDiffSelection(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
     setTabs((current) =>
       current.map((item) =>
         item.id === tab.id
@@ -487,7 +488,6 @@ export function App() {
           : item,
       ),
     )
-    await refreshTab(tab.id, undefined, undefined, selectionPreference)
     setShortcutScope('files')
   }
 
@@ -1927,7 +1927,7 @@ function DiffView({
       onMouseUp={() => onSelectionChange(selectionFromDom())}
       onKeyUp={() => onSelectionChange(selectionFromDom())}
       onContextMenu={(event) => {
-        const currentSelection = selectionFromDom()
+        const currentSelection = selectionFromDom() ?? selectedLines
         onSelectionChange(currentSelection)
         const target =
           event.target instanceof Element ? event.target.closest<HTMLElement>('.diff-line') : null
@@ -1939,6 +1939,7 @@ function DiffView({
         <div
           className="diff-line line-hunk"
           data-hunk={hunkIndex}
+          data-hunk-boundary="true"
           key={`hunk-${hunk.oldStart}-${hunk.newStart}-${hunk.header}`}
         >
           {hunk.header}
@@ -2016,8 +2017,8 @@ function selectionFromDom(): DiffLineSelection | null {
   const end = closestDiffLine(range.endContainer)
   if (!start || !end) return null
 
-  const startLine = Number(start.dataset.visibleLine)
-  const endLine = Number(end.dataset.visibleLine)
+  const startLine = selectionBoundaryLine(start, 'start')
+  const endLine = selectionBoundaryLine(end, 'end')
   if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return null
 
   return { start: startLine, end: endLine }
@@ -2025,7 +2026,19 @@ function selectionFromDom(): DiffLineSelection | null {
 
 function closestDiffLine(node: Node) {
   const element = node instanceof Element ? node : node.parentElement
-  return element?.closest<HTMLElement>('.diff-line[data-visible-line]')
+  return element?.closest<HTMLElement>('.diff-line')
+}
+
+function selectionBoundaryLine(line: HTMLElement, edge: 'start' | 'end') {
+  const visibleLine = Number(line.dataset.visibleLine)
+  if (Number.isFinite(visibleLine)) return visibleLine
+  if (line.dataset.hunkBoundary !== 'true') return Number.NaN
+
+  const boundaryLine =
+    edge === 'start'
+      ? line.nextElementSibling?.closest<HTMLElement>('.diff-line[data-visible-line]')
+      : line.previousElementSibling?.closest<HTMLElement>('.diff-line[data-visible-line]')
+  return Number(boundaryLine?.dataset.visibleLine)
 }
 
 function markerForLine(kind: ParsedDiffLine['kind']) {

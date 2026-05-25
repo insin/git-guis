@@ -99,14 +99,19 @@ export function selectedDiffText(patch: string, selection: DiffLineSelection | n
   )
   const start = Math.min(selection.start, selection.end)
   const end = Math.max(selection.start, selection.end)
-  const lines = parsed.hunks.flatMap((hunk) =>
-    hunk.lines
-      .filter(
-        (line) =>
-          line.visibleLine !== undefined && line.visibleLine >= start && line.visibleLine <= end,
-      )
-      .map((line) => (isNewFile && line.kind === 'add' ? line.text : renderLine(line))),
-  )
+  const lines = parsed.hunks.flatMap((hunk) => {
+    const selectedLines = hunk.lines.filter(
+      (line) =>
+        line.visibleLine !== undefined && line.visibleLine >= start && line.visibleLine <= end,
+    )
+    if (selectedLines.length === 0) return []
+    return [
+      hunk.header,
+      ...selectedLines.map((line) =>
+        isNewFile && line.kind === 'add' ? line.text : renderLine(line),
+      ),
+    ]
+  })
 
   return lines.length > 0 ? lines.join('\n') : null
 }
