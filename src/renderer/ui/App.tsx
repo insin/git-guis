@@ -230,23 +230,18 @@ export function App() {
     }
 
     const root = validation.data.root
-    let activeId: string | null = null
-    let refreshId: string | null = null
-    setTabs((current) => {
-      const existing = current.find((tab) => tab.path === root)
-      if (existing) {
-        activeId = existing.id
-        return current
-      }
+    const existing = tabs.find((tab) => tab.path === root)
+    if (existing) {
+      setActiveTabId(existing.id)
+      return
+    }
 
-      const tab = createTab(root)
-      activeId = tab.id
-      refreshId = tab.id
+    const tab = createTab(root)
+    setTabs((current) => {
       return [...current, tab]
     })
-
-    if (activeId) setActiveTabId(activeId)
-    if (refreshId) void refreshTab(refreshId, root)
+    setActiveTabId(tab.id)
+    void refreshTab(tab.id, root)
   }
 
   const openRepository = async () => {
@@ -310,6 +305,7 @@ export function App() {
       const repoPath = explicitPath ?? tab?.path
       if (!repoPath) return
       const amend = explicitAmend ?? tab?.amend ?? false
+      const initialSelection = explicitPath ? initialStatusSelection : undefined
 
       const status = await window.gitApi.getStatus(repoPath, amend)
       if (!status.ok || !status.data) {
@@ -341,7 +337,12 @@ export function App() {
       const latestTab = tabs.find((item) => item.id === tabId) ?? tab
       const selection = latestTab
         ? preserveSelection(latestTab, statusData, selectionPreference)
-        : { path: null, pane: 'unstaged' as Pane, paths: [], anchorPath: null }
+        : (initialSelection?.(statusData) ?? {
+            path: null,
+            pane: 'unstaged' as Pane,
+            paths: [],
+            anchorPath: null,
+          })
       if (selection.path) void loadDiff(tabId, repoPath, selection.path, selection.pane, amend)
     },
     [tabs],
@@ -2359,6 +2360,24 @@ function preserveSelection(
       anchorPath: tab.selectionAnchorPath ?? paths[0],
     }
   }
+  if (status.unstaged[0])
+    return {
+      path: status.unstaged[0].path,
+      pane: 'unstaged',
+      paths: [status.unstaged[0].path],
+      anchorPath: status.unstaged[0].path,
+    }
+  if (status.staged[0])
+    return {
+      path: status.staged[0].path,
+      pane: 'staged',
+      paths: [status.staged[0].path],
+      anchorPath: status.staged[0].path,
+    }
+  return { path: null, pane: 'unstaged', paths: [], anchorPath: null }
+}
+
+function initialStatusSelection(status: RepoStatus): FileSelection {
   if (status.unstaged[0])
     return {
       path: status.unstaged[0].path,
