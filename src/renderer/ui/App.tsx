@@ -196,6 +196,10 @@ export function App() {
         event.preventDefault()
         void commit(activeTab)
       }
+      if (isPushShortcut(event)) {
+        event.preventDefault()
+        void openPushDialog(activeTab)
+      }
       if (isAmendShortcut(event)) {
         event.preventDefault()
         toggleAmend(activeTab)
@@ -1435,6 +1439,19 @@ type PushDialogProps = {
 }
 
 function PushDialog({ state, onChange, onCancel, onSubmit }: PushDialogProps) {
+  useEffect(() => {
+    if (state.pushing) return
+
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onCancel()
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [state.pushing, onCancel])
+
   return (
     <div className="modal-backdrop">
       <form
@@ -2059,6 +2076,12 @@ function isRevertShortcut(event: KeyboardEvent) {
 
 function isCommitShortcut(event: KeyboardEvent) {
   return event.key === 'Enter' && primaryModifier(event) && !event.altKey && !event.shiftKey
+}
+
+function isPushShortcut(event: KeyboardEvent) {
+  return (
+    event.key.toLowerCase() === 'p' && primaryModifier(event) && !event.altKey && !event.shiftKey
+  )
 }
 
 function isAmendShortcut(event: KeyboardEvent) {
