@@ -13,9 +13,12 @@ import {
   type OpenDialogOptions,
   shell,
 } from 'electron'
+import started from 'electron-squirrel-startup'
 
 import type { PushOptions, ResetMode, ThemeName } from '../src/shared/types.js'
 import { GitService } from './services/gitService.js'
+
+if (started) app.quit()
 
 const git = new GitService()
 
@@ -219,7 +222,7 @@ function createWindow() {
     height: 960,
     minWidth: 980,
     minHeight: 620,
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1f1f1f' : '#f5f5f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

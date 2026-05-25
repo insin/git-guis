@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --host 127.0.0.1",
-    "dev:electron": "wait-on tcp:5173 && npm run build:electron && env -u ELECTRON_RUN_AS_NODE VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "dev:electron": "wait-on tcp:5173 && npm run build:electron && node scripts/dev-electron.cjs",
     "build": "npm run check && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "check": "biome check && npm run typecheck",
@@ -45,5 +45,8 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "wait-on": "^9.0.10"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
   }
 }
