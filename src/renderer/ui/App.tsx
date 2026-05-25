@@ -182,12 +182,16 @@ export function App() {
       }
       if (isStageShortcut(event)) {
         event.preventDefault()
-        if (shortcutScope === 'diff') void applySelectedLineShortcut(activeTab)
+        if (shortcutScope === 'diff' && activeTab.selectedLines)
+          void applySelectedLineShortcut(activeTab)
+        else if (shortcutScope === 'diff') void toggleStage(activeTab)
         if (shortcutScope === 'files') void toggleStage(activeTab)
       }
       if (isUnstageShortcut(event)) {
         event.preventDefault()
-        if (shortcutScope === 'diff') void applySelectedLineShortcut(activeTab, 'staged')
+        if (shortcutScope === 'diff' && activeTab.selectedLines)
+          void applySelectedLineShortcut(activeTab, 'staged')
+        else if (shortcutScope === 'diff') void unstageSelected(activeTab)
         if (shortcutScope === 'files') void unstageSelected(activeTab)
       }
       if (isRevertShortcut(event)) {
