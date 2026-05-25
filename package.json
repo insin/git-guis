@@ -1,6 +1,6 @@
 {
   "name": "git-guis",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A tabbed git-gui style desktop app.",
   "main": "dist-electron/electron/main.js",
   "bin": {
@@ -16,6 +16,7 @@
     "check:fix": "biome check --write",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
+    "make:mac": "npm run build && electron-forge make -- --platform=darwin --arch=arm64",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
