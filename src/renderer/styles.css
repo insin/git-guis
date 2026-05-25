@@ -760,6 +760,7 @@ input:not([type="checkbox"]) {
   border-top: 1px solid var(--border);
   background: var(--panel-subtle);
   color: var(--muted);
+  user-select: text;
 }
 
 .empty-state {
