@@ -43,6 +43,7 @@ type FileSelection = {
 }
 
 type LastRevert = {
+  repoPath: string
   patch: string
   pane: Pane
   path: string | null
@@ -67,7 +68,6 @@ type RepoTab = {
   commitDraft: string
   amend: boolean
   selectedLines: DiffLineSelection | null
-  lastRevert: LastRevert | null
   message: string
 }
 
@@ -124,7 +124,9 @@ export function App() {
   const [shortcutScope, setShortcutScope] = useState<ShortcutScope>('files')
   const [pushDialog, setPushDialog] = useState<PushDialogState | null>(null)
   const [resetDialog, setResetDialog] = useState<ResetDialogState | null>(null)
+  const [lastRevert, setLastRevert] = useState<LastRevert | null>(null)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
+  const activeLastRevert = activeTab && lastRevert?.repoPath === activeTab.path ? lastRevert : null
 
   useEffect(() => {
     document.documentElement.dataset.theme = prefs.theme
@@ -473,21 +475,14 @@ export function App() {
     }
 
     clearDiffSelection(tab.id)
+    const nextLastRevert: LastRevert = {
+      repoPath: tab.path,
+      patch,
+      pane: tab.selectedPane,
+      path: sourcePath,
+    }
+    setLastRevert(nextLastRevert)
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
-    setTabs((current) =>
-      current.map((item) =>
-        item.id === tab.id
-          ? {
-              ...item,
-              lastRevert: {
-                patch,
-                pane: tab.selectedPane,
-                path: sourcePath,
-              },
-            }
-          : item,
-      ),
-    )
     setShortcutScope('files')
   }
 
@@ -529,9 +524,7 @@ export function App() {
         return
       }
     }
-    setTabs((current) =>
-      current.map((item) => (item.id === tab.id ? { ...item, lastRevert: null } : item)),
-    )
+    setLastRevert((current) => (current?.repoPath === tab.path ? null : current))
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
@@ -552,18 +545,15 @@ export function App() {
     await revertPatch(tab, patch, tab.selectedPath)
   }
 
-  const undoLastRevert = async (tab: RepoTab) => {
-    if (!tab.lastRevert) return
-    const lastRevert = tab.lastRevert
+  const undoLastRevert = async (tab: RepoTab, lastRevert: LastRevert | null) => {
+    if (!lastRevert) return
     const result = await window.gitApi.applyWorktreePatch(tab.path, lastRevert.patch, false)
     if (!result.ok) {
       showMessage(tab.id, result.error ?? 'Unable to undo last revert.')
       return
     }
 
-    setTabs((current) =>
-      current.map((item) => (item.id === tab.id ? { ...item, lastRevert: null } : item)),
-    )
+    setLastRevert((current) => (current === lastRevert ? null : current))
     await refreshTab(tab.id, undefined, undefined, {
       pane: lastRevert.pane,
       path: lastRevert.path,
@@ -671,6 +661,7 @@ export function App() {
     }
 
     saveDraft(tab.path, '')
+    setLastRevert((current) => (current?.repoPath === tab.path ? null : current))
     setTabs((current) =>
       current.map((item) =>
         item.id === tab.id
@@ -680,7 +671,6 @@ export function App() {
               commitDraft: '',
               diff: null,
               selectedLines: null,
-              lastRevert: null,
               selectedPath: null,
               selectedPaths: [],
               selectionAnchorPath: null,
@@ -957,6 +947,7 @@ export function App() {
       {activeTab ? (
         <RepositoryView
           tab={activeTab}
+          lastRevert={activeLastRevert}
           prefs={prefs}
           showCommitBrowser={showCommitBrowser}
           onToggleCommitBrowser={() => setShowCommitBrowser((visible) => !visible)}
@@ -970,7 +961,7 @@ export function App() {
           onApplySelection={(selection) => applySelection(activeTab, selection)}
           onRevertHunk={(hunkIndex) => revertHunk(activeTab, hunkIndex)}
           onRevertSelection={(selection) => revertSelection(activeTab, selection)}
-          onUndoLastRevert={() => undoLastRevert(activeTab)}
+          onUndoLastRevert={() => undoLastRevert(activeTab, activeLastRevert)}
           onCopySelectedDiff={(selection) => copySelectedDiff(activeTab, selection)}
           onSelectedLines={(range) =>
             setTabs((current) =>
@@ -1023,6 +1014,7 @@ export function App() {
 
 type RepositoryViewProps = {
   tab: RepoTab
+  lastRevert: LastRevert | null
   prefs: Preferences
   showCommitBrowser: boolean
   onToggleCommitBrowser(): void
@@ -1056,6 +1048,7 @@ type DiffContextMenu = {
 
 function RepositoryView({
   tab,
+  lastRevert,
   prefs,
   showCommitBrowser,
   onToggleCommitBrowser,
@@ -1266,7 +1259,7 @@ function RepositoryView({
                     Revert Hunk
                   </button>
                   <button
-                    disabled={tab.selectedPane !== 'unstaged' || !tab.lastRevert}
+                    disabled={!lastRevert}
                     onClick={() => runMenuAction(onUndoLastRevert)}
                     type="button"
                   >
@@ -2245,7 +2238,6 @@ function createTab(repoPath: string): RepoTab {
     commitDraft: loadDraft(repoPath),
     amend: false,
     selectedLines: null,
-    lastRevert: null,
     message: 'Ready.',
   }
 }
