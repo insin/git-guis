@@ -46,6 +46,7 @@ type LastRevert = {
   repoPath: string
   patch: string
   pane: Pane
+  // Null only when the original file can no longer be selected after refresh.
   path: string | null
 }
 
@@ -182,17 +183,13 @@ export function App() {
       }
       if (isStageShortcut(event)) {
         event.preventDefault()
-        if (shortcutScope === 'diff' && activeTab.selectedLines)
-          void applySelectedLineShortcut(activeTab)
-        else if (shortcutScope === 'diff') void toggleStage(activeTab)
-        if (shortcutScope === 'files') void toggleStage(activeTab)
+        if (activeTab.selectedLines) void applySelectedLineShortcut(activeTab)
+        else void toggleStage(activeTab)
       }
       if (isUnstageShortcut(event)) {
         event.preventDefault()
-        if (shortcutScope === 'diff' && activeTab.selectedLines)
-          void applySelectedLineShortcut(activeTab, 'staged')
-        else if (shortcutScope === 'diff') void unstageSelected(activeTab)
-        if (shortcutScope === 'files') void unstageSelected(activeTab)
+        if (activeTab.selectedLines) void applySelectedLineShortcut(activeTab, 'staged')
+        else void unstageSelected(activeTab)
       }
       if (isRevertShortcut(event)) {
         event.preventDefault()
