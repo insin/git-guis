@@ -50,6 +50,35 @@ function themeMenuItems(): MenuItemConstructorOptions[] {
   }))
 }
 
+function editMenu(): MenuItemConstructorOptions {
+  return {
+    label: 'Edit',
+    submenu: [
+      { role: 'undo' },
+      { role: 'redo' },
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { role: 'delete' },
+    ],
+  }
+}
+
+function editableContextMenu(): Electron.Menu {
+  return Menu.buildFromTemplate([
+    { role: 'undo' },
+    { role: 'redo' },
+    { type: 'separator' },
+    { role: 'cut' },
+    { role: 'copy' },
+    { role: 'paste' },
+    { role: 'delete' },
+    { type: 'separator' },
+    { role: 'selectAll' },
+  ])
+}
+
 function showNativeMessage(options: MessageBoxOptions) {
   return mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options)
 }
@@ -162,7 +191,7 @@ function buildApplicationMenu() {
           : []),
       ],
     },
-    { role: 'editMenu' },
+    editMenu(),
     {
       label: 'View',
       submenu: [
@@ -237,6 +266,11 @@ function createWindow() {
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
+
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable) return
+    editableContextMenu().popup({ window: mainWindow ?? undefined })
+  })
 }
 
 for (const repoPath of repoPathsFromArgv(process.argv)) {

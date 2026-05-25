@@ -162,6 +162,18 @@ export function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!activeTab) return
+      if (isSelectAllShortcut(event)) {
+        const textTarget = textInputTarget(event.target) ?? textInputTarget(document.activeElement)
+        if (textTarget) {
+          event.preventDefault()
+          selectTextTarget(textTarget)
+          return
+        }
+        event.preventDefault()
+        if (diffHasFocus()) selectAllDiff(activeTab)
+        else window.getSelection()?.removeAllRanges()
+        return
+      }
       if (isRefreshShortcut(event)) {
         event.preventDefault()
         void refreshTab(activeTab.id)
@@ -190,8 +202,8 @@ export function App() {
       }
     }
 
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
   }, [activeTab, tabs, shortcutScope])
 
   useEffect(() => {
@@ -613,6 +625,27 @@ export function App() {
     window.getSelection()?.removeAllRanges()
     setTabs((current) =>
       current.map((item) => (item.id === tabId ? { ...item, selectedLines: null } : item)),
+    )
+  }
+
+  const selectAllDiff = (tab: RepoTab) => {
+    if (tab.diff?.kind !== 'text') return
+    const lastLine = lastVisibleDiffLine(tab.diff.patch)
+    if (!lastLine) return
+
+    const diffElement = document.querySelector<HTMLElement>('.diff-body .classic-diff')
+    if (diffElement) {
+      const range = document.createRange()
+      range.selectNodeContents(diffElement)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    }
+
+    setTabs((current) =>
+      current.map((item) =>
+        item.id === tab.id ? { ...item, selectedLines: { start: 1, end: lastLine } } : item,
+      ),
     )
   }
 
@@ -1137,10 +1170,19 @@ function RepositoryView({
                 <span>{tab.selectedPath ? `File: ${tab.selectedPath}` : 'No file selected'}</span>
               </div>
 
+              {/* biome-ignore lint/a11y/useSemanticElements: read-only diff viewer needs focus for scoped shortcuts. */}
               <div
+                aria-label="Diff"
+                aria-multiline="true"
+                aria-readonly="true"
                 className="diff-body"
                 onFocusCapture={() => onShortcutScopeChange('diff')}
-                onPointerDownCapture={() => onShortcutScopeChange('diff')}
+                onPointerDownCapture={(event) => {
+                  onShortcutScopeChange('diff')
+                  event.currentTarget.focus({ preventScroll: true })
+                }}
+                role="textbox"
+                tabIndex={0}
               >
                 {tab.diffLoading ? (
                   <div className="placeholder">Loading diff...</div>
@@ -1982,6 +2024,13 @@ function isNewFilePatch(patch: string) {
   return parsed.header.some((line) => line === '--- /dev/null' || line === 'new file mode 100644')
 }
 
+function lastVisibleDiffLine(patch: string) {
+  const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
+  return parsed.hunks
+    .flatMap((hunk) => hunk.lines)
+    .reduce((lastLine, line) => Math.max(lastLine, line.visibleLine ?? 0), 0)
+}
+
 function isRefreshShortcut(event: KeyboardEvent) {
   return (
     (event.key === 'F5' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) ||
@@ -2015,6 +2064,30 @@ function isAmendShortcut(event: KeyboardEvent) {
   return (
     event.key.toLowerCase() === 'e' && primaryModifier(event) && !event.altKey && !event.shiftKey
   )
+}
+
+function isSelectAllShortcut(event: KeyboardEvent) {
+  return (
+    event.key.toLowerCase() === 'a' && primaryModifier(event) && !event.altKey && !event.shiftKey
+  )
+}
+
+function diffHasFocus() {
+  return Boolean(document.activeElement?.closest('.diff-body'))
+}
+
+function textInputTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return null
+  if (target instanceof HTMLTextAreaElement) return target
+  if (!(target instanceof HTMLInputElement)) return null
+
+  return ['email', 'number', 'password', 'search', 'tel', 'text', 'url'].includes(target.type)
+    ? target
+    : null
+}
+
+function selectTextTarget(target: HTMLInputElement | HTMLTextAreaElement) {
+  target.select()
 }
 
 function primaryModifier(event: KeyboardEvent) {

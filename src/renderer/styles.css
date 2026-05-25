@@ -152,6 +152,7 @@ input:not([type="checkbox"]) {
 .app-shell {
   @apply h-full overflow-hidden;
   background: var(--app-bg);
+  user-select: none;
 }
 
 .tab-bar {
@@ -427,6 +428,11 @@ input:not([type="checkbox"]) {
   background: var(--editor-bg);
 }
 
+.diff-body:focus {
+  outline: 1px solid var(--selection);
+  outline-offset: -1px;
+}
+
 .classic-diff {
   @apply m-0 min-h-full p-0;
   background: var(--editor-bg);
@@ -443,6 +449,7 @@ input:not([type="checkbox"]) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 18px;
+  user-select: text;
 }
 
 .diff-line {
@@ -584,6 +591,7 @@ input:not([type="checkbox"]) {
   border: 1px solid var(--border);
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  user-select: text;
 }
 
 .commit-actions button {
