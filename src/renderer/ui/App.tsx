@@ -184,6 +184,10 @@ export function App() {
         event.preventDefault()
         void commit(activeTab)
       }
+      if (isAmendShortcut(event)) {
+        event.preventDefault()
+        toggleAmend(activeTab)
+      }
     }
 
     window.addEventListener('keydown', handler)
@@ -784,25 +788,42 @@ export function App() {
     }
   }
 
+  const toggleAmend = (tab: RepoTab) => {
+    setAmend(tab, !tab.amend)
+  }
+
+  const setAmend = (tab: RepoTab, amend: boolean) => {
+    if (tab.amend === amend) return
+    if (amend) saveDraft(tab.path, tab.commitDraft)
+    const restoredDraft = amend ? tab.commitDraft : loadDraft(tab.path)
+    setTabs((current) =>
+      current.map((item) =>
+        item.id === tab.id ? { ...item, amend, commitDraft: restoredDraft } : item,
+      ),
+    )
+    void refreshTab(tab.id, undefined, amend)
+    if (amend) void loadAmendMessage(tab)
+  }
+
   const loadAmendMessage = async (tab: RepoTab) => {
     const result = await window.gitApi.getLastCommitMessage(tab.path)
     if (!result.ok || result.data === undefined) {
       showMessage(tab.id, result.error ?? 'Unable to load last commit message.')
       return
     }
-    updateDraft(tab.id, result.data)
-  }
-
-  const clearUnchangedAmendMessage = async (tab: RepoTab) => {
-    const result = await window.gitApi.getLastCommitMessage(tab.path)
-    if (result.ok && result.data === tab.commitDraft) updateDraft(tab.id, '')
+    const message = result.data
+    setTabs((current) =>
+      current.map((item) =>
+        item.id === tab.id && item.amend ? { ...item, commitDraft: message } : item,
+      ),
+    )
   }
 
   const updateDraft = (tabId: string, value: string) => {
     setTabs((current) =>
       current.map((tab) => {
         if (tab.id !== tabId) return tab
-        saveDraft(tab.path, value)
+        if (!tab.amend) saveDraft(tab.path, value)
         return { ...tab, commitDraft: value }
       }),
     )
@@ -924,14 +945,7 @@ export function App() {
           onCherryPickCommit={(commit) => cherryPickCommit(activeTab, commit)}
           onResetToCommit={(commit) => openResetDialog(activeTab, commit)}
           onCopyCommitHash={(hash) => copyHash(activeTab, hash)}
-          onAmendChange={(amend) => {
-            setTabs((current) =>
-              current.map((tab) => (tab.id === activeTab.id ? { ...tab, amend } : tab)),
-            )
-            void refreshTab(activeTab.id, undefined, amend)
-            if (amend && !activeTab.commitDraft.trim()) void loadAmendMessage(activeTab)
-            if (!amend && activeTab.commitDraft) void clearUnchangedAmendMessage(activeTab)
-          }}
+          onAmendChange={(amend) => setAmend(activeTab, amend)}
         />
       ) : (
         <section className="empty-state">
@@ -1995,6 +2009,12 @@ function isRevertShortcut(event: KeyboardEvent) {
 
 function isCommitShortcut(event: KeyboardEvent) {
   return event.key === 'Enter' && primaryModifier(event) && !event.altKey && !event.shiftKey
+}
+
+function isAmendShortcut(event: KeyboardEvent) {
+  return (
+    event.key.toLowerCase() === 'e' && primaryModifier(event) && !event.altKey && !event.shiftKey
+  )
 }
 
 function primaryModifier(event: KeyboardEvent) {
