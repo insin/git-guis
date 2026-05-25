@@ -1314,7 +1314,7 @@ function RepositoryView({
                     className="commit-editor-panel"
                     defaultSize="58%"
                     id="message"
-                    minSize={260}
+                    minSize={440}
                   >
                     <CommitEditor
                       amend={tab.amend}
@@ -1404,9 +1404,9 @@ function CommitEditor({
       </div>
       <div className="commit-message-field">
         <div className="commit-message-header">
-          <span>Commit Message:</span>
+          <span className="whitespace-nowrap">Commit Message:</span>
           <div className="commit-message-controls">
-            <label>
+            <label className="whitespace-nowrap">
               <input
                 type="checkbox"
                 checked={amend}
