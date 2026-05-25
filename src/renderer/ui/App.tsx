@@ -25,6 +25,7 @@ import { loadJson, saveJson } from '../utils/storage'
 
 type DiffMode = 'highlighted' | 'classic'
 type Pane = 'unstaged' | 'staged'
+type ShortcutScope = 'files' | 'diff' | 'other'
 
 type SelectionPreference = {
   pane: Pane
@@ -112,6 +113,7 @@ export function App() {
   )
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
+  const [shortcutScope, setShortcutScope] = useState<ShortcutScope>('files')
   const [pushDialog, setPushDialog] = useState<PushDialogState | null>(null)
   const [resetDialog, setResetDialog] = useState<ResetDialogState | null>(null)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null
@@ -158,11 +160,13 @@ export function App() {
       }
       if (isStageShortcut(event)) {
         event.preventDefault()
-        void toggleStage(activeTab)
+        if (shortcutScope === 'diff') void applySelectedLineShortcut(activeTab)
+        if (shortcutScope === 'files') void toggleStage(activeTab)
       }
       if (isUnstageShortcut(event)) {
         event.preventDefault()
-        void unstageSelected(activeTab)
+        if (shortcutScope === 'diff') void applySelectedLineShortcut(activeTab, 'staged')
+        if (shortcutScope === 'files') void unstageSelected(activeTab)
       }
       if (isRevertShortcut(event)) {
         event.preventDefault()
@@ -176,7 +180,7 @@ export function App() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [activeTab, tabs])
+  }, [activeTab, tabs, shortcutScope])
 
   useEffect(() => {
     const handler = () => {
@@ -476,6 +480,11 @@ export function App() {
       return
     }
     await refreshTab(tab.id)
+  }
+
+  const applySelectedLineShortcut = async (tab: RepoTab, pane?: Pane) => {
+    if (pane && tab.selectedPane !== pane) return
+    await applySelection(tab)
   }
 
   const copySelectedDiff = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
@@ -779,6 +788,7 @@ export function App() {
           prefs={prefs}
           showCommitBrowser={showCommitBrowser}
           onToggleCommitBrowser={() => setShowCommitBrowser((visible) => !visible)}
+          onShortcutScopeChange={setShortcutScope}
           onRefresh={() => refreshTab(activeTab.id)}
           onSelect={(pane, change, event, changes) =>
             selectFile(activeTab, pane, change, event, changes)
@@ -849,6 +859,7 @@ type RepositoryViewProps = {
   prefs: Preferences
   showCommitBrowser: boolean
   onToggleCommitBrowser(): void
+  onShortcutScopeChange(scope: ShortcutScope): void
   onRefresh(): void
   onSelect(pane: Pane, change: FileChange, event: ReactMouseEvent, changes: FileChange[]): void
   onToggleStage(): void
@@ -879,6 +890,7 @@ function RepositoryView({
   prefs,
   showCommitBrowser,
   onToggleCommitBrowser,
+  onShortcutScopeChange,
   onRefresh,
   onSelect,
   onToggleStage,
@@ -960,6 +972,7 @@ function RepositoryView({
                 changes={tab.status?.unstaged ?? []}
                 selectedPath={tab.selectedPane === 'unstaged' ? tab.selectedPath : null}
                 selectedPaths={tab.selectedPane === 'unstaged' ? tab.selectedPaths : []}
+                onActivate={() => onShortcutScopeChange('files')}
                 onSelect={(change, event, changes) => onSelect('unstaged', change, event, changes)}
               />
             </Panel>
@@ -971,6 +984,7 @@ function RepositoryView({
                 changes={tab.status?.staged ?? []}
                 selectedPath={tab.selectedPane === 'staged' ? tab.selectedPath : null}
                 selectedPaths={tab.selectedPane === 'staged' ? tab.selectedPaths : []}
+                onActivate={() => onShortcutScopeChange('files')}
                 onSelect={(change, event, changes) => onSelect('staged', change, event, changes)}
               />
             </Panel>
@@ -993,7 +1007,11 @@ function RepositoryView({
                 <span>{tab.selectedPath ? `File: ${tab.selectedPath}` : 'No file selected'}</span>
               </div>
 
-              <div className="diff-body">
+              <div
+                className="diff-body"
+                onFocusCapture={() => onShortcutScopeChange('diff')}
+                onPointerDownCapture={() => onShortcutScopeChange('diff')}
+              >
                 {tab.diffLoading ? (
                   <div className="placeholder">Loading diff...</div>
                 ) : tab.diff?.kind === 'text' ? (
@@ -1076,7 +1094,14 @@ function RepositoryView({
 
             <Separator className="resize-handle resize-handle-vertical" id="right-pane-separator" />
 
-            <Panel className="commit-panel" defaultSize="24%" id="commit" minSize={140}>
+            <Panel
+              className="commit-panel"
+              defaultSize="24%"
+              id="commit"
+              minSize={140}
+              onFocusCapture={() => onShortcutScopeChange('other')}
+              onPointerDownCapture={() => onShortcutScopeChange('other')}
+            >
               {showCommitBrowser ? (
                 <Group
                   className="commit-area-panels"
@@ -1603,13 +1628,22 @@ type FileListProps = {
   changes: FileChange[]
   selectedPath: string | null
   selectedPaths: string[]
+  onActivate(): void
   onSelect(change: FileChange, event: ReactMouseEvent, changes: FileChange[]): void
 }
 
-function FileList({ title, tone, changes, selectedPath, selectedPaths, onSelect }: FileListProps) {
+function FileList({
+  title,
+  tone,
+  changes,
+  selectedPath,
+  selectedPaths,
+  onActivate,
+  onSelect,
+}: FileListProps) {
   const selectedPathSet = new Set(selectedPaths)
   return (
-    <section className="file-list">
+    <section className="file-list" onFocusCapture={onActivate} onPointerDownCapture={onActivate}>
       <header className={tone}>{title}</header>
       <div className="file-list-body">
         {changes.length > 0 &&
