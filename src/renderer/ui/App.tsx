@@ -1628,6 +1628,7 @@ function CommitBrowser({
   const [loadingCommits, setLoadingCommits] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<CommitContextMenu>(null)
+  const activeCommitHash = contextMenu?.commit.hash ?? null
 
   const selectedBranch = branches.find((branch) => branch.ref === selectedRef) ?? null
 
@@ -1745,7 +1746,7 @@ function CommitBrowser({
         ) : (
           commits.map((commit) => (
             <button
-              className="commit-row"
+              className={`commit-row ${activeCommitHash === commit.hash ? 'active' : ''}`}
               key={commit.hash}
               onContextMenu={(event) => {
                 event.preventDefault()

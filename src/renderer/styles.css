@@ -631,7 +631,8 @@ input:not([type="checkbox"]) {
   grid-template-columns: minmax(0, 1fr) 74px;
 }
 
-.commit-row:hover {
+.commit-row:hover,
+.commit-row.active {
   background: var(--selection);
   color: var(--selection-text);
 }
@@ -645,7 +646,8 @@ input:not([type="checkbox"]) {
   color: var(--muted);
 }
 
-.commit-row:hover .commit-date {
+.commit-row:hover .commit-date,
+.commit-row.active .commit-date {
   color: var(--selection-text);
 }
 
