@@ -659,6 +659,10 @@ export function App() {
       showMessage(tab.id, 'Commit message is empty.')
       return
     }
+    if (!tab.amend && (tab.status?.staged.length ?? 0) === 0) {
+      showMessage(tab.id, 'No staged changes to commit.')
+      return
+    }
 
     const result = await window.gitApi.commit(tab.path, message, tab.amend)
     if (!result.ok) {
