@@ -513,6 +513,11 @@ input:not([type="checkbox"]) {
   color: var(--selection-text);
 }
 
+.context-menu-divider {
+  @apply my-1;
+  border-top: 1px solid var(--border);
+}
+
 .context-menu-note {
   @apply px-2 py-1 text-xs;
   color: var(--muted);

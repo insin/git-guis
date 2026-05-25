@@ -322,6 +322,11 @@ ipcMain.handle(
 ipcMain.handle('git:applyPatch', (_event, repoPath: string, patch: string, reverse: boolean) =>
   git.applyPatch(repoPath, patch, reverse),
 )
+ipcMain.handle(
+  'git:applyWorktreePatch',
+  (_event, repoPath: string, patch: string, reverse: boolean) =>
+    git.applyWorktreePatch(repoPath, patch, reverse),
+)
 ipcMain.handle('git:commit', (_event, repoPath: string, message: string, amend: boolean) =>
   git.commit(repoPath, message, amend),
 )

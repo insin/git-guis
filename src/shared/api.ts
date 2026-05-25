@@ -25,6 +25,7 @@ export type GitApi = {
   unstageFile(repoPath: string, filePath: string, amend?: boolean): Promise<GitResult>
   revertFile(repoPath: string, filePath: string, untracked: boolean): Promise<GitResult>
   applyPatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult>
+  applyWorktreePatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult>
   commit(repoPath: string, message: string, amend: boolean): Promise<GitResult<string>>
   listBranches(repoPath: string): Promise<GitResult<string[]>>
   listRemotes(repoPath: string): Promise<GitResult<string[]>>

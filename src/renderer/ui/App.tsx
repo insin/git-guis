@@ -32,6 +32,7 @@ type SelectionPreference = {
   path: string | null
   paths?: string[]
   anchorPath?: string | null
+  fallbackPath?: string | null
 }
 
 type FileSelection = {
@@ -39,6 +40,12 @@ type FileSelection = {
   path: string | null
   paths: string[]
   anchorPath: string | null
+}
+
+type LastRevert = {
+  patch: string
+  pane: Pane
+  path: string | null
 }
 
 type Preferences = {
@@ -60,6 +67,7 @@ type RepoTab = {
   commitDraft: string
   amend: boolean
   selectedLines: DiffLineSelection | null
+  lastRevert: LastRevert | null
   message: string
 }
 
@@ -334,9 +342,16 @@ export function App() {
               selectedPane: pane,
               selectedPaths: selection?.paths ?? tab.selectedPaths,
               selectionAnchorPath: selection?.anchorPath ?? tab.selectionAnchorPath,
-              diffLoading: true,
+              diffLoading: !(
+                tab.selectedPath === filePath &&
+                tab.selectedPane === pane &&
+                tab.diff
+              ),
               selectedLines: null,
-              message: 'Loading diff...',
+              message:
+                tab.selectedPath === filePath && tab.selectedPane === pane && tab.diff
+                  ? tab.message
+                  : 'Loading diff...',
             }
           : tab,
       ),
@@ -425,6 +440,37 @@ export function App() {
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
+  const revertPatch = async (
+    tab: RepoTab,
+    patch: string,
+    sourcePath: string | null,
+    selectionPreference = currentFileSelectionWithFallback(tab),
+  ) => {
+    const result = await window.gitApi.applyWorktreePatch(tab.path, patch, true)
+    if (!result.ok) {
+      showMessage(tab.id, result.error ?? 'Patch did not apply.')
+      return
+    }
+
+    clearDiffSelection(tab.id)
+    setTabs((current) =>
+      current.map((item) =>
+        item.id === tab.id
+          ? {
+              ...item,
+              lastRevert: {
+                patch,
+                pane: tab.selectedPane,
+                path: sourcePath,
+              },
+            }
+          : item,
+      ),
+    )
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
+    setShortcutScope('files')
+  }
+
   const revertSelected = async (tab: RepoTab) => {
     if (!tab.selectedPath || tab.selectedPane !== 'unstaged') return
     const changes = selectedChanges(tab, 'unstaged')
@@ -440,6 +486,17 @@ export function App() {
     if (!window.confirm(message)) return
 
     const selectionPreference = previousFileSelection(tab)
+    if (
+      changes.length === 1 &&
+      onlyChange &&
+      onlyChange.kind !== 'untracked' &&
+      tab.diff?.kind === 'text' &&
+      tab.selectedPath === onlyChange.path
+    ) {
+      await revertPatch(tab, tab.diff.patch, onlyChange.path, selectionPreference)
+      return
+    }
+
     for (const change of changes) {
       const result = await window.gitApi.revertFile(
         tab.path,
@@ -452,11 +509,53 @@ export function App() {
         return
       }
     }
+    setTabs((current) =>
+      current.map((item) => (item.id === tab.id ? { ...item, lastRevert: null } : item)),
+    )
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
+  }
+
+  const revertHunk = async (tab: RepoTab, hunkIndex: number) => {
+    if (tab.selectedPane !== 'unstaged' || tab.diff?.kind !== 'text') return
+    const patch = buildHunkPatch(tab.diff.patch, hunkIndex)
+    if (!patch) return
+    await revertPatch(tab, patch, tab.selectedPath)
+  }
+
+  const revertSelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
+    if (tab.selectedPane !== 'unstaged' || tab.diff?.kind !== 'text') return
+    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
+    if (!patch) {
+      showMessage(tab.id, 'Select changed lines before reverting a partial patch.')
+      return
+    }
+    await revertPatch(tab, patch, tab.selectedPath)
+  }
+
+  const undoLastRevert = async (tab: RepoTab) => {
+    if (!tab.lastRevert) return
+    const lastRevert = tab.lastRevert
+    const result = await window.gitApi.applyWorktreePatch(tab.path, lastRevert.patch, false)
+    if (!result.ok) {
+      showMessage(tab.id, result.error ?? 'Unable to undo last revert.')
+      return
+    }
+
+    setTabs((current) =>
+      current.map((item) => (item.id === tab.id ? { ...item, lastRevert: null } : item)),
+    )
+    await refreshTab(tab.id, undefined, undefined, {
+      pane: lastRevert.pane,
+      path: lastRevert.path,
+      paths: lastRevert.path ? [lastRevert.path] : [],
+      anchorPath: lastRevert.path,
+    })
+    setShortcutScope('files')
   }
 
   const applyHunk = async (tab: RepoTab, hunkIndex: number) => {
     if (tab.diff?.kind !== 'text') return
+    const selectionPreference = currentFileSelectionWithFallback(tab)
     const patch = buildHunkPatch(tab.diff.patch, hunkIndex)
     if (!patch) return
     const result = await window.gitApi.applyPatch(tab.path, patch, tab.selectedPane === 'staged')
@@ -464,12 +563,12 @@ export function App() {
       showMessage(tab.id, result.error ?? 'Patch did not apply.')
       return
     }
-    await refreshTab(tab.id)
+    await refreshTab(tab.id, undefined, undefined, selectionPreference)
   }
 
   const applySelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
     if (tab.diff?.kind !== 'text') return
-    const selectionPreference = previousFileSelection(tab)
+    const selectionPreference = currentFileSelectionWithFallback(tab)
     const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
     if (!patch) {
       showMessage(tab.id, 'Select changed lines before applying a partial patch.')
@@ -480,6 +579,7 @@ export function App() {
       showMessage(tab.id, result.error ?? 'Patch did not apply.')
       return
     }
+    clearDiffSelection(tab.id)
     await refreshTab(tab.id, undefined, undefined, selectionPreference)
     setShortcutScope('files')
   }
@@ -505,6 +605,13 @@ export function App() {
     }
   }
 
+  const clearDiffSelection = (tabId: string) => {
+    window.getSelection()?.removeAllRanges()
+    setTabs((current) =>
+      current.map((item) => (item.id === tabId ? { ...item, selectedLines: null } : item)),
+    )
+  }
+
   const commit = async (tab: RepoTab) => {
     const message = tab.commitDraft
     if (!message.trim()) {
@@ -528,6 +635,7 @@ export function App() {
               commitDraft: '',
               diff: null,
               selectedLines: null,
+              lastRevert: null,
               selectedPath: null,
               selectedPaths: [],
               selectionAnchorPath: null,
@@ -796,9 +904,11 @@ export function App() {
             selectFile(activeTab, pane, change, event, changes)
           }
           onToggleStage={() => toggleStage(activeTab)}
-          onRevert={() => revertSelected(activeTab)}
           onApplyHunk={(hunkIndex) => applyHunk(activeTab, hunkIndex)}
           onApplySelection={(selection) => applySelection(activeTab, selection)}
+          onRevertHunk={(hunkIndex) => revertHunk(activeTab, hunkIndex)}
+          onRevertSelection={(selection) => revertSelection(activeTab, selection)}
+          onUndoLastRevert={() => undoLastRevert(activeTab)}
           onCopySelectedDiff={(selection) => copySelectedDiff(activeTab, selection)}
           onSelectedLines={(range) =>
             setTabs((current) =>
@@ -865,9 +975,11 @@ type RepositoryViewProps = {
   onRefresh(): void
   onSelect(pane: Pane, change: FileChange, event: ReactMouseEvent, changes: FileChange[]): void
   onToggleStage(): void
-  onRevert(): void
   onApplyHunk(hunkIndex: number): void
   onApplySelection(selection?: DiffLineSelection | null): void
+  onRevertHunk(hunkIndex: number): void
+  onRevertSelection(selection?: DiffLineSelection | null): void
+  onUndoLastRevert(): void
   onCopySelectedDiff(selection?: DiffLineSelection | null): void
   onSelectedLines(range: DiffLineSelection | null): void
   onDraftChange(value: string): void
@@ -896,9 +1008,11 @@ function RepositoryView({
   onRefresh,
   onSelect,
   onToggleStage,
-  onRevert,
   onApplyHunk,
   onApplySelection,
+  onRevertHunk,
+  onRevertSelection,
+  onUndoLastRevert,
   onCopySelectedDiff,
   onSelectedLines,
   onDraftChange,
@@ -1026,7 +1140,7 @@ function RepositoryView({
                       event.preventDefault()
                       event.stopPropagation()
                       setContextMenu({
-                        ...clampedMenuPosition(event.clientX, event.clientY, 180, 190),
+                        ...clampedMenuPosition(event.clientX, event.clientY, 200, 300),
                         hunkIndex,
                         selection,
                       })
@@ -1050,15 +1164,6 @@ function RepositoryView({
                   >
                     {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
                   </button>
-                  {!diffIsNewFile && (
-                    <button
-                      disabled={!contextMenu.selection}
-                      onClick={() => runMenuAction(() => onCopySelectedDiff(contextMenu.selection))}
-                      type="button"
-                    >
-                      Copy Diff
-                    </button>
-                  )}
                   <button
                     disabled={contextMenu.hunkIndex === null}
                     onClick={() =>
@@ -1077,16 +1182,45 @@ function RepositoryView({
                   >
                     {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} File
                   </button>
+                  <div className="context-menu-divider" />
                   <button
-                    disabled={tab.selectedPane !== 'unstaged' || !tab.selectedPath}
-                    onClick={() => runMenuAction(onRevert)}
+                    disabled={tab.selectedPane !== 'unstaged' || !contextMenu.selection}
+                    onClick={() => runMenuAction(() => onRevertSelection(contextMenu.selection))}
                     type="button"
                   >
-                    Revert File
+                    Revert Selected Lines
                   </button>
+                  <button
+                    disabled={tab.selectedPane !== 'unstaged' || contextMenu.hunkIndex === null}
+                    onClick={() =>
+                      runMenuAction(() => {
+                        if (contextMenu.hunkIndex !== null) onRevertHunk(contextMenu.hunkIndex)
+                      })
+                    }
+                    type="button"
+                  >
+                    Revert Hunk
+                  </button>
+                  <button
+                    disabled={tab.selectedPane !== 'unstaged' || !tab.lastRevert}
+                    onClick={() => runMenuAction(onUndoLastRevert)}
+                    type="button"
+                  >
+                    Undo Last Revert
+                  </button>
+                  <div className="context-menu-divider" />
                   <button onClick={() => runMenuAction(onRefresh)} type="button">
                     Refresh
                   </button>
+                  {!diffIsNewFile && (
+                    <button
+                      disabled={!contextMenu.selection}
+                      onClick={() => runMenuAction(() => onCopySelectedDiff(contextMenu.selection))}
+                      type="button"
+                    >
+                      Copy Diff
+                    </button>
+                  )}
                   {hunks.length > 1 && (
                     <div className="context-menu-note">{hunks.length} hunks in file</div>
                   )}
@@ -1977,6 +2111,7 @@ function createTab(repoPath: string): RepoTab {
     commitDraft: loadDraft(repoPath),
     amend: false,
     selectedLines: null,
+    lastRevert: null,
     message: 'Ready.',
   }
 }
@@ -2030,6 +2165,17 @@ function previousFileSelection(tab: RepoTab): SelectionPreference | undefined {
   }
 }
 
+function currentFileSelectionWithFallback(tab: RepoTab): SelectionPreference | undefined {
+  if (!tab.selectedPath) return previousFileSelection(tab)
+  return {
+    pane: tab.selectedPane,
+    path: tab.selectedPath,
+    paths: [tab.selectedPath],
+    anchorPath: tab.selectedPath,
+    fallbackPath: previousFileSelection(tab)?.path ?? null,
+  }
+}
+
 function preserveSelection(
   tab: RepoTab,
   status: RepoStatus,
@@ -2040,12 +2186,25 @@ function preserveSelection(
     const preferredPaths = (preference.paths ?? []).filter((path) =>
       preferredList.some((change) => change.path === path),
     )
+    const fallbackPath =
+      preference.fallbackPath &&
+      preferredList.some((change) => change.path === preference.fallbackPath)
+        ? preference.fallbackPath
+        : null
     if (preference.path && preferredList.some((change) => change.path === preference.path)) {
       return {
         path: preference.path,
         pane: preference.pane,
         paths: preferredPaths.length > 0 ? preferredPaths : [preference.path],
         anchorPath: preference.anchorPath ?? preference.path,
+      }
+    }
+    if (fallbackPath) {
+      return {
+        path: fallbackPath,
+        pane: preference.pane,
+        paths: [fallbackPath],
+        anchorPath: fallbackPath,
       }
     }
     return {

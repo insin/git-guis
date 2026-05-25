@@ -136,13 +136,30 @@ export class GitService {
   }
 
   async applyPatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult> {
-    const checkArgs = ['apply', '--cached', '--check', reverse ? '--reverse' : ''].filter(Boolean)
+    return this.applyGitPatch(repoPath, patch, reverse, true)
+  }
+
+  async applyWorktreePatch(repoPath: string, patch: string, reverse: boolean): Promise<GitResult> {
+    return this.applyGitPatch(repoPath, patch, reverse, false)
+  }
+
+  private async applyGitPatch(
+    repoPath: string,
+    patch: string,
+    reverse: boolean,
+    cached: boolean,
+  ): Promise<GitResult> {
+    const checkArgs = ['apply', cached ? '--cached' : '', '--check', reverse ? '--reverse' : '']
+      .filter(Boolean)
+      .map(String)
     const applyArgs = [
       'apply',
-      '--cached',
+      cached ? '--cached' : '',
       '--whitespace=nowarn',
       reverse ? '--reverse' : '',
-    ].filter(Boolean)
+    ]
+      .filter(Boolean)
+      .map(String)
 
     const check = await this.git(repoPath, checkArgs, { input: patch, allowFailure: true })
     if (check.code !== 0)

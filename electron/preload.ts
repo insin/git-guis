@@ -16,6 +16,8 @@ const gitApi: GitApi = {
     ipcRenderer.invoke('git:revertFile', repoPath, filePath, untracked),
   applyPatch: (repoPath, patch, reverse) =>
     ipcRenderer.invoke('git:applyPatch', repoPath, patch, reverse),
+  applyWorktreePatch: (repoPath, patch, reverse) =>
+    ipcRenderer.invoke('git:applyWorktreePatch', repoPath, patch, reverse),
   commit: (repoPath, message, amend) => ipcRenderer.invoke('git:commit', repoPath, message, amend),
   listBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
   listRemotes: (repoPath) => ipcRenderer.invoke('git:listRemotes', repoPath),
