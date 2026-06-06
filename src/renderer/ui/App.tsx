@@ -165,6 +165,12 @@ export function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!activeTab) return
+      const fileNavigation = fileNavigationDirection(event)
+      if (fileNavigation && shortcutScope === 'files' && !preservesArrowNavigation(event.target)) {
+        event.preventDefault()
+        navigateSelectedFile(activeTab, fileNavigation)
+        return
+      }
       if (isSelectAllShortcut(event)) {
         const textTarget = textInputTarget(event.target) ?? textInputTarget(document.activeElement)
         if (textTarget) {
@@ -424,6 +430,24 @@ export function App() {
     }
 
     void loadDiff(tab.id, tab.path, selection.path, selection.pane, tab.amend, selection)
+  }
+
+  const navigateSelectedFile = (tab: RepoTab, direction: -1 | 1) => {
+    if (!tab.selectedPath) return
+    const changes = selectedPaneChanges(tab)
+    const currentIndex = changes.findIndex((change) => change.path === tab.selectedPath)
+    if (currentIndex === -1) return
+
+    const nextChange = changes[currentIndex + direction]
+    if (!nextChange) return
+
+    const selection: FileSelection = {
+      pane: tab.selectedPane,
+      path: nextChange.path,
+      paths: [nextChange.path],
+      anchorPath: nextChange.path,
+    }
+    void loadDiff(tab.id, tab.path, nextChange.path, tab.selectedPane, tab.amend, selection)
   }
 
   const toggleStage = async (tab: RepoTab) => {
@@ -1857,8 +1881,22 @@ function FileList({
   onSelect,
 }: FileListProps) {
   const selectedPathSet = new Set(selectedPaths)
+  const listRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!selectedPath) return
+    listRef.current
+      ?.querySelector<HTMLElement>('.file-row.active')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [selectedPath])
+
   return (
-    <section className="file-list" onFocusCapture={onActivate} onPointerDownCapture={onActivate}>
+    <section
+      className="file-list"
+      onFocusCapture={onActivate}
+      onPointerDownCapture={onActivate}
+      ref={listRef}
+    >
       <header className={tone}>{title}</header>
       <div className="file-list-body">
         {changes.length > 0 &&
@@ -2071,6 +2109,24 @@ function isRefreshShortcut(event: KeyboardEvent) {
   return (
     (event.key === 'F5' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) ||
     (event.key.toLowerCase() === 'r' && primaryModifier(event) && !event.altKey && !event.shiftKey)
+  )
+}
+
+function fileNavigationDirection(event: KeyboardEvent): -1 | 1 | null {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null
+  if (event.key === 'ArrowUp') return -1
+  if (event.key === 'ArrowDown') return 1
+  return null
+}
+
+function preservesArrowNavigation(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    Boolean(target.closest('.modal-backdrop'))
   )
 }
 
