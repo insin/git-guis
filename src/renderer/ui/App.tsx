@@ -1982,6 +1982,7 @@ function DiffView({
   onSelectionChange,
   onContextMenu,
 }: DiffViewProps) {
+  const selectionDrag = useRef<{ pointerId: number; anchorY: number } | null>(null)
   if (!patch) return null
   const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
   const isNewFile = isNewFilePatch(patch)
@@ -1991,6 +1992,25 @@ function DiffView({
       className={`classic-diff ${highlighted ? 'highlighted-diff' : ''}`}
       onMouseUp={() => onSelectionChange(selectionFromDom())}
       onKeyUp={() => onSelectionChange(selectionFromDom())}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        selectionDrag.current = { pointerId: event.pointerId, anchorY: event.clientY }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        const drag = selectionDrag.current
+        if (!drag || drag.pointerId !== event.pointerId || event.buttons !== 1) return
+        constrainDiffSelection(event.currentTarget, event.clientX, event.clientY, drag.anchorY)
+      }}
+      onPointerUp={(event) => {
+        if (selectionDrag.current?.pointerId === event.pointerId) selectionDrag.current = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+      }}
+      onLostPointerCapture={() => {
+        selectionDrag.current = null
+      }}
       onContextMenu={(event) => {
         const currentSelection = selectionFromDom() ?? selectedLines
         onSelectionChange(currentSelection)
@@ -2092,6 +2112,49 @@ function selectionFromDom(): DiffLineSelection | null {
 function closestDiffLine(node: Node) {
   const element = node instanceof Element ? node : node.parentElement
   return element?.closest<HTMLElement>('.diff-line')
+}
+
+function constrainDiffSelection(
+  diff: HTMLElement,
+  clientX: number,
+  clientY: number,
+  anchorY: number,
+) {
+  const viewport = diff.closest<HTMLElement>('.diff-body')
+  if (!viewport) return
+
+  const bounds = viewport.getBoundingClientRect()
+  if (clientX >= bounds.left && clientX <= bounds.right) return
+
+  const targetY = Math.min(Math.max(clientY, bounds.top + 1), bounds.bottom - 1)
+  const targetX = clientX < bounds.left ? bounds.left + 20 : bounds.right - 4
+
+  requestAnimationFrame(() => {
+    const target = document.elementFromPoint(targetX, targetY)?.closest<HTMLElement>('.diff-line')
+    if (!target || !diff.contains(target)) return
+
+    const selection = window.getSelection()
+    if (!selection?.anchorNode || !diff.contains(selection.anchorNode)) return
+
+    const endpoint = selectionEndpoint(target, targetY >= anchorY ? 'end' : 'start')
+    if (endpoint) selection.extend(endpoint.node, endpoint.offset)
+  })
+}
+
+function selectionEndpoint(line: HTMLElement, edge: 'start' | 'end') {
+  const content = line.querySelector<HTMLElement>('.diff-code') ?? line
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+  let node = walker.nextNode()
+  if (!node) return null
+
+  if (edge === 'start') return { node, offset: 0 }
+
+  let last = node
+  while (node) {
+    last = node
+    node = walker.nextNode()
+  }
+  return { node: last, offset: last.textContent?.length ?? 0 }
 }
 
 function selectionBoundaryLine(line: HTMLElement, edge: 'start' | 'end') {
