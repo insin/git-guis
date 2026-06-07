@@ -17,6 +17,7 @@
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
     "make:mac": "npm run build && electron-forge make -- --platform=darwin --arch=arm64",
+    "make:mac:notarized": "node --env-file=.env --run make:mac",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },

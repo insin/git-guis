@@ -1,5 +1,21 @@
 const path = require('node:path')
 
+const notarizationCredentials = {
+  appleId: process.env.APPLE_ID,
+  appleIdPassword: process.env.APPLE_PASSWORD,
+  teamId: process.env.APPLE_TEAM_ID,
+}
+const notarizationValues = Object.values(notarizationCredentials)
+const notarizationConfigured = notarizationValues.every(Boolean)
+
+if (!notarizationConfigured && notarizationValues.some(Boolean)) {
+  throw new Error(
+    'Apple notarization requires APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID together.',
+  )
+}
+
+const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY || notarizationConfigured)
+
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
   packagerConfig: {
@@ -10,6 +26,24 @@ module.exports = {
     extraResource: [path.join(__dirname, 'bin')],
     icon: path.join(__dirname, 'assets', 'icon'),
     name: 'Git Guis',
+    ...(shouldSignMac
+      ? {
+          osxSign: {
+            hardenedRuntime: true,
+            ...(process.env.APPLE_SIGNING_IDENTITY
+              ? { identity: process.env.APPLE_SIGNING_IDENTITY }
+              : {}),
+          },
+        }
+      : {}),
+    ...(notarizationConfigured
+      ? {
+          osxNotarize: {
+            ...notarizationCredentials,
+            tool: 'notarytool',
+          },
+        }
+      : {}),
   },
   rebuildConfig: {},
   makers: [

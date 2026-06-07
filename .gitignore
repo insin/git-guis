@@ -1,5 +1,6 @@
 .DS_Store
-dist/
+.env
 dist-electron/
+dist/
 node_modules/
 out/
