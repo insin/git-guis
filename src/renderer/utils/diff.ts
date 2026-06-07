@@ -65,7 +65,7 @@ export function parseUnifiedDiff(patch: string): ParsedFileDiff {
       current.lines.push({ kind: 'context', text: line.slice(1), oldLine, newLine })
       oldLine += 1
       newLine += 1
-    } else if (line.startsWith('\\ No newline')) {
+    } else if (line.startsWith('\\ ')) {
       current.lines.push({ kind: 'meta', text: line })
     }
   }
@@ -74,17 +74,28 @@ export function parseUnifiedDiff(patch: string): ParsedFileDiff {
 }
 
 export function buildHunkPatch(patch: string, hunkIndex: number) {
-  const parsed = parseUnifiedDiff(patch)
-  const hunk = parsed.hunks[hunkIndex]
-  if (!hunk) return null
-  return [...parsed.header, renderFullHunk(hunk), ''].join('\n')
+  const lines = patch.split('\n')
+  const hunkStarts = lines
+    .map((line, index) => (/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line) ? index : -1))
+    .filter((index) => index !== -1)
+  const start = hunkStarts[hunkIndex]
+  if (start === undefined) return null
+
+  let end = hunkStarts[hunkIndex + 1] ?? lines.length
+  while (end > start && lines[end - 1] === '') end -= 1
+
+  return [...lines.slice(0, hunkStarts[0]), ...lines.slice(start, end), ''].join('\n')
 }
 
-export function buildSelectionPatch(patch: string, selection: DiffLineSelection | null) {
+export function buildSelectionPatch(
+  patch: string,
+  selection: DiffLineSelection | null,
+  reverse = false,
+) {
   if (!selection) return null
   const parsed = withVisibleLineNumbers(parseUnifiedDiff(patch))
   const selectedHunks = parsed.hunks
-    .map((hunk) => renderPartialHunk(hunk, selection))
+    .map((hunk) => renderPartialHunk(hunk, selection, reverse))
     .filter((hunk): hunk is string => Boolean(hunk))
 
   if (selectedHunks.length === 0) return null
@@ -116,20 +127,21 @@ export function selectedDiffText(patch: string, selection: DiffLineSelection | n
   return lines.length > 0 ? lines.join('\n') : null
 }
 
-function renderFullHunk(hunk: ParsedHunk) {
-  return [hunk.header, ...hunk.lines.map(renderLine)].join('\n')
-}
-
-function renderPartialHunk(hunk: ParsedHunk, selection: DiffLineSelection) {
+function renderPartialHunk(hunk: ParsedHunk, selection: DiffLineSelection, reverse: boolean) {
   const rendered: string[] = []
+  const preContext: string[] = []
   let oldCount = 0
   let newCount = 0
   let changed = false
 
-  for (let index = 0; index < hunk.lines.length; index += 1) {
-    const line = hunk.lines[index]
+  const flushPreContext = () => {
+    rendered.push(...preContext)
+    preContext.length = 0
+  }
 
+  for (const line of hunk.lines) {
     if (line.kind === 'context') {
+      flushPreContext()
       rendered.push(` ${line.text}`)
       oldCount += 1
       newCount += 1
@@ -137,27 +149,39 @@ function renderPartialHunk(hunk: ParsedHunk, selection: DiffLineSelection) {
     }
 
     if (line.kind === 'meta') {
+      flushPreContext()
       rendered.push(line.text)
       continue
     }
 
     if (isChangedLineSelected(line, selection)) {
       changed = true
-      rendered.push(renderLine(line))
-      if (line.kind === 'del') oldCount += 1
-      if (line.kind === 'add') newCount += 1
+      if (line.kind === 'del') {
+        oldCount += 1
+        flushPreContext()
+        rendered.push(renderLine(line))
+      } else {
+        newCount += 1
+        rendered.push(renderLine(line))
+      }
       continue
     }
 
-    if (line.kind === 'del') {
-      rendered.push(` ${line.text}`)
+    const becomesContext = reverse ? line.kind === 'add' : line.kind === 'del'
+    if (becomesContext) {
       oldCount += 1
       newCount += 1
+      const contextLine = ` ${line.text}`
+      if (line.kind === 'del') preContext.push(contextLine)
+      else rendered.push(contextLine)
+    } else {
+      flushPreContext()
     }
   }
 
   if (!changed) return null
-  return [`@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`, ...rendered].join(
+  flushPreContext()
+  return [`@@ -${hunk.oldStart},${oldCount} +${hunk.oldStart},${newCount} @@`, ...rendered].join(
     '\n',
   )
 }

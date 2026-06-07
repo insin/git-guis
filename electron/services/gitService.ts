@@ -79,8 +79,16 @@ export class GitService {
   ): Promise<GitResult<GitDiff>> {
     try {
       const args = staged
-        ? ['diff', '--cached', '--no-ext-diff', ...(amend ? ['HEAD^'] : []), '--', filePath]
-        : ['diff', '--no-ext-diff', '--', filePath]
+        ? [
+            'diff',
+            '--cached',
+            '--no-ext-diff',
+            '--no-textconv',
+            ...(amend ? ['HEAD^'] : []),
+            '--',
+            filePath,
+          ]
+        : ['diff', '--no-ext-diff', '--no-textconv', '--', filePath]
       const result = await this.git(repoPath, args, { allowFailure: true })
       if (result.code !== 0) return { ok: false, error: result.stderr || 'Unable to read diff.' }
 

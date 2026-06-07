@@ -556,6 +556,10 @@ export function App() {
 
   const revertHunk = async (tab: RepoTab, hunkIndex: number) => {
     if (tab.selectedPane !== 'unstaged' || tab.diff?.kind !== 'text') return
+    if (!partialOperationsAllowed(tab)) {
+      showMessage(tab.id, 'Partial operations are only available for modified files.')
+      return
+    }
     const patch = buildHunkPatch(tab.diff.patch, hunkIndex)
     if (!patch) return
     await revertPatch(tab, patch, tab.selectedPath)
@@ -563,7 +567,11 @@ export function App() {
 
   const revertSelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
     if (tab.selectedPane !== 'unstaged' || tab.diff?.kind !== 'text') return
-    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
+    if (!partialOperationsAllowed(tab)) {
+      showMessage(tab.id, 'Partial operations are only available for modified files.')
+      return
+    }
+    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines, true)
     if (!patch) {
       showMessage(tab.id, 'Select changed lines before reverting a partial patch.')
       return
@@ -591,6 +599,10 @@ export function App() {
 
   const applyHunk = async (tab: RepoTab, hunkIndex: number) => {
     if (tab.diff?.kind !== 'text') return
+    if (!partialOperationsAllowed(tab)) {
+      showMessage(tab.id, 'Partial operations are only available for modified files.')
+      return
+    }
     const selectionPreference = currentFileSelectionWithFallback(tab)
     const patch = buildHunkPatch(tab.diff.patch, hunkIndex)
     if (!patch) return
@@ -604,13 +616,18 @@ export function App() {
 
   const applySelection = async (tab: RepoTab, selection?: DiffLineSelection | null) => {
     if (tab.diff?.kind !== 'text') return
+    if (!partialOperationsAllowed(tab)) {
+      showMessage(tab.id, 'Partial operations are only available for modified files.')
+      return
+    }
     const selectionPreference = currentFileSelectionWithFallback(tab)
-    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines)
+    const reverse = tab.selectedPane === 'staged'
+    const patch = buildSelectionPatch(tab.diff.patch, selection ?? tab.selectedLines, reverse)
     if (!patch) {
       showMessage(tab.id, 'Select changed lines before applying a partial patch.')
       return
     }
-    const result = await window.gitApi.applyPatch(tab.path, patch, tab.selectedPane === 'staged')
+    const result = await window.gitApi.applyPatch(tab.path, patch, reverse)
     if (!result.ok) {
       showMessage(tab.id, result.error ?? 'Patch did not apply.')
       return
@@ -1103,6 +1120,7 @@ function RepositoryView({
     [tab.diff],
   )
   const diffIsNewFile = tab.diff?.kind === 'text' && isNewFilePatch(tab.diff.patch)
+  const allowPartialOperations = partialOperationsAllowed(tab)
   const diffTitle =
     tab.selectedPane === 'staged'
       ? tab.amend
@@ -1241,14 +1259,14 @@ function RepositoryView({
                   style={{ left: contextMenu.x, top: contextMenu.y }}
                 >
                   <button
-                    disabled={!contextMenu.selection}
+                    disabled={!allowPartialOperations || !contextMenu.selection}
                     onClick={() => runMenuAction(() => onApplySelection(contextMenu.selection))}
                     type="button"
                   >
                     {tab.selectedPane === 'staged' ? 'Unstage' : 'Stage'} Selected Lines
                   </button>
                   <button
-                    disabled={contextMenu.hunkIndex === null}
+                    disabled={!allowPartialOperations || contextMenu.hunkIndex === null}
                     onClick={() =>
                       runMenuAction(() => {
                         if (contextMenu.hunkIndex !== null) onApplyHunk(contextMenu.hunkIndex)
@@ -1267,14 +1285,22 @@ function RepositoryView({
                   </button>
                   <div className="context-menu-divider" />
                   <button
-                    disabled={tab.selectedPane !== 'unstaged' || !contextMenu.selection}
+                    disabled={
+                      tab.selectedPane !== 'unstaged' ||
+                      !allowPartialOperations ||
+                      !contextMenu.selection
+                    }
                     onClick={() => runMenuAction(() => onRevertSelection(contextMenu.selection))}
                     type="button"
                   >
                     Revert Selected Lines
                   </button>
                   <button
-                    disabled={tab.selectedPane !== 'unstaged' || contextMenu.hunkIndex === null}
+                    disabled={
+                      tab.selectedPane !== 'unstaged' ||
+                      !allowPartialOperations ||
+                      contextMenu.hunkIndex === null
+                    }
                     onClick={() =>
                       runMenuAction(() => {
                         if (contextMenu.hunkIndex !== null) onRevertHunk(contextMenu.hunkIndex)
@@ -2332,6 +2358,13 @@ function selectedChanges(tab: RepoTab, pane: Pane) {
 
 function selectedPaneChanges(tab: RepoTab) {
   return tab.selectedPane === 'staged' ? (tab.status?.staged ?? []) : (tab.status?.unstaged ?? [])
+}
+
+function partialOperationsAllowed(tab: RepoTab) {
+  if (!tab.selectedPath) return false
+  const change = selectedPaneChanges(tab).find((item) => item.path === tab.selectedPath)
+  if (!change) return false
+  return tab.selectedPane === 'staged' ? change.indexStatus === 'M' : change.worktreeStatus === 'M'
 }
 
 function previousFileSelection(tab: RepoTab): SelectionPreference | undefined {
