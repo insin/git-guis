@@ -8,6 +8,8 @@ Git Guis is a partial clone of `git gui` (just the bits I use) which fixes the f
 
 It also adds a new branch pane which contains just the bits of `gitk` I use (checkout, cherry-pick and reset).
 
+![Screenshot of Git Guis](screenshot.png)
+
 ## Development
 
 Requires Node.js, npm, and Git.
