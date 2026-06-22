@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" width="128" height="128">
+</p>
+
 # Git Guis
 
 Git Guis is a partial clone of `git gui` (just the bits I use) which fixes the following issues I have as a long-time enjoyer of `git gui` as a separate workspace for reviewing changes and building commits:
