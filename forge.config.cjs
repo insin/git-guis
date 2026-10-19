@@ -1,5 +1,7 @@
 const path = require('node:path')
 
+const { version } = require('./package.json')
+
 const notarizationCredentials = {
   appleId: process.env.APPLE_ID,
   appleIdPassword: process.env.APPLE_PASSWORD,
@@ -49,14 +51,17 @@ module.exports = {
   makers: [
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      platforms: ['darwin', 'win32'],
     },
     {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
-      config: {
+      config: (arch) => ({
         name: 'git_guis',
-      },
+        setupExe: `Git Guis-win32-${arch}-${version} Setup.exe`,
+        setupIcon: path.join(__dirname, 'assets', 'icon.ico'),
+        iconUrl: 'https://raw.githubusercontent.com/insin/git-guis/main/assets/icon.ico',
+      }),
     },
     {
       name: '@electron-forge/maker-deb',

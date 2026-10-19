@@ -44,7 +44,7 @@ npm run check:fix
 npm run build     # build renderer and Electron code
 npm run package   # create an unpacked application
 npm run make      # create configured distributables
-npm run make:win  # create a Windows x64 installer (run on Windows)
+npm run make:win  # create a Windows x64 installer and zip (run on Windows)
 npm run make:mac  # create an Apple Silicon macOS zip
 ```
 
