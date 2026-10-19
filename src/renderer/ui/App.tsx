@@ -910,7 +910,7 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="tab-bar">
-        <div className="drag-region" />
+        {isMacPlatform() && <div className="drag-region" />}
         <ul className="tab-list">
           {tabs.map((tab) => (
             <li

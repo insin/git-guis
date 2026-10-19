@@ -16,13 +16,14 @@
     "check:fix": "biome check --write",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
+    "make:win": "npm run build && electron-forge make --platform=win32 --arch=x64",
     "make:mac": "npm run build && electron-forge make -- --platform=darwin --arch=arm64",
     "make:mac:notarized": "node --env-file=.env --run make:mac",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "keywords": [],
-  "author": "",
+  "author": "Jonny Buchanan",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {

@@ -358,6 +358,7 @@ export class GitService {
   private git(repoPath: string, args: string[], options: RunOptions = {}): Promise<RunResult> {
     return new Promise((resolve, reject) => {
       const child = spawn('git', ['-C', repoPath, ...args], {
+        windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
@@ -675,6 +676,7 @@ async function describeBinaryFile(repoPath: string, filePath: string) {
 function runFileCommand(filePath: string): Promise<string | null> {
   return new Promise((resolve) => {
     const child = spawn('file', ['-b', filePath], {
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
     })
 

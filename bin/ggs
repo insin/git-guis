@@ -11,6 +11,7 @@ const targetPath = path.resolve(process.argv[2] || process.cwd())
 function gitRoot(cwd) {
   const result = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
+    windowsHide: true,
   })
   if (result.status !== 0) return null
   return result.stdout.trim()
@@ -50,15 +51,54 @@ function openMac(repoPath) {
   child.unref()
 }
 
+function openWindows(repoPath) {
+  const executable = `${appName}.exe`
+  const installDirectory = path.join(
+    process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+    'git_guis',
+  )
+  const installedVersions = fs.existsSync(installDirectory)
+    ? fs
+        .readdirSync(installDirectory)
+        .filter((name) => name.startsWith('app-'))
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+        .map((name) => path.join(installDirectory, name, executable))
+    : []
+  const candidates = [
+    process.env.GIT_GUIS_APP,
+    path.resolve(__dirname, '..', '..', executable),
+    ...installedVersions,
+    path.resolve(__dirname, '..', 'out', `${appName}-win32-${process.arch}`, executable),
+  ]
+  const appPath = candidates.find((candidate) => candidate && fs.existsSync(candidate))
+  if (!appPath) {
+    console.error('ggs: build the Windows app with npm run package or set GIT_GUIS_APP to its .exe')
+    process.exit(1)
+  }
+
+  const child = spawn(appPath, ['--repo', repoPath], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+  })
+  child.on('error', (error) => {
+    console.error(`ggs: ${error.message}`)
+    process.exitCode = 1
+  })
+  child.unref()
+}
+
 const repoPath = gitRoot(targetPath)
 if (!repoPath) {
   console.error(`ggs: ${targetPath} is not inside a Git repository`)
   process.exit(1)
 }
 
-if (process.platform !== 'darwin') {
-  console.error('ggs: only macOS launch is wired up right now')
+if (process.platform === 'darwin') {
+  openMac(repoPath)
+} else if (process.platform === 'win32') {
+  openWindows(repoPath)
+} else {
+  console.error('ggs: launch is supported on macOS and Windows')
   process.exit(1)
 }
-
-openMac(repoPath)
