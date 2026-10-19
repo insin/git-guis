@@ -40,6 +40,7 @@ export type GitApi = {
 }
 
 export type AppApi = {
+  showMenu(): void
   setTheme(theme: ThemeName): void
   getLaunchRepositories(): Promise<string[]>
   onThemeSelected(callback: (theme: ThemeName) => void): () => void

@@ -1,4 +1,4 @@
-import { File, FileCheck, GitBranch, Plus, X } from 'lucide-react'
+import { File, FileCheck, GitBranch, Menu, Plus, X } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
@@ -909,8 +909,21 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="tab-bar">
+      <header
+        className={`tab-bar${navigator.platform.startsWith('Win') ? ' windows-title-bar' : ''}`}
+      >
         {isMacPlatform() && <div className="drag-region" />}
+        {navigator.platform.startsWith('Win') && (
+          <button
+            aria-label="Application menu"
+            className="tab-menu"
+            onClick={() => window.appApi?.showMenu()}
+            title="Application menu (Alt or F10)"
+            type="button"
+          >
+            <Menu aria-hidden size={18} />
+          </button>
+        )}
         <ul className="tab-list">
           {tabs.map((tab) => (
             <li
@@ -1156,7 +1169,7 @@ function RepositoryView({
   return (
     <section className="repo-view">
       <div className="branch-strip">
-        <strong>Current Branch:</strong> {tab.status?.branch ?? 'detached'} <span>{tab.path}</span>
+        Current Branch: {tab.status?.branch ?? 'detached'} <span>{tab.path}</span>
       </div>
       <Group
         className="workspace-panels"
@@ -1211,7 +1224,7 @@ function RepositoryView({
           >
             <Panel className="diff-panel" defaultSize="76%" id="diff" minSize={160}>
               <div className="diff-header">
-                <strong>{diffTitle}</strong>
+                <span>{diffTitle}</span>
                 <span>{tab.selectedPath ? `File: ${tab.selectedPath}` : 'No file selected'}</span>
               </div>
 

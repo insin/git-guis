@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --app-bg: #f1f1f1;
   --panel-bg: #ffffff;
   --panel-subtle: #f6f6f6;
@@ -27,6 +27,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
+    color-scheme: dark;
     --app-bg: #2f2f2f;
     --panel-bg: #1f1f1f;
     --panel-subtle: #272727;
@@ -51,6 +52,7 @@
 
 :root[data-theme="dark"],
 :root[data-theme="monokai"] {
+  color-scheme: dark;
   --app-bg: #222222;
   --panel-bg: #1f1f1f;
   --panel-subtle: #272727;
@@ -131,7 +133,7 @@ button {
   padding: 3px 8px;
 }
 
-button:hover:not(:disabled) {
+:where(button:hover:not(:disabled)) {
   background: var(--button-hover);
 }
 
@@ -149,6 +151,16 @@ input:not([type="checkbox"]) {
   padding: 3px 7px;
 }
 
+select:focus,
+textarea:focus,
+input:focus-visible,
+button:focus-visible,
+.diff-body:focus,
+.resize-handle:focus-visible {
+  outline: 1px solid var(--selection);
+  outline-offset: -1px;
+}
+
 .app-shell {
   @apply h-full overflow-hidden;
   background: var(--app-bg);
@@ -163,6 +175,10 @@ input:not([type="checkbox"]) {
   -webkit-app-region: drag;
 }
 
+.windows-title-bar {
+  padding-right: max(146px, calc(100vw - env(titlebar-area-width, 100vw)));
+}
+
 .drag-region {
   width: 62px;
   flex: 0 0 auto;
@@ -175,6 +191,7 @@ input:not([type="checkbox"]) {
 }
 
 .repo-tab,
+.tab-menu,
 .tab-add,
 .tab-bar select {
   -webkit-app-region: no-drag;
@@ -195,12 +212,14 @@ input:not([type="checkbox"]) {
 }
 
 .repo-tab:hover {
-  background: color-mix(in srgb, var(--button) 24%, transparent);
+  background: var(--button);
   color: var(--text);
 }
 
 .repo-tab.active {
-  background: color-mix(in srgb, var(--button) 46%, var(--panel-bg));
+  background: var(--panel-bg);
+  border-color: var(--border-strong);
+  border-bottom-color: var(--panel-bg);
   color: var(--text);
 }
 
@@ -249,6 +268,7 @@ input:not([type="checkbox"]) {
   opacity: 1;
 }
 
+.tab-menu,
 .tab-add {
   @apply inline-flex flex-none items-center justify-center border-0 bg-transparent p-0.5;
   align-self: center;
@@ -256,6 +276,7 @@ input:not([type="checkbox"]) {
   color: var(--muted);
 }
 
+.tab-menu:hover:not(:disabled),
 .tab-add:hover:not(:disabled) {
   background: color-mix(in srgb, var(--button) 24%, transparent);
   color: var(--text);
@@ -329,17 +350,12 @@ input:not([type="checkbox"]) {
   background: var(--border-strong);
 }
 
-.resize-handle:focus-visible {
-  outline: 1px solid var(--selection);
-  outline-offset: -1px;
-}
-
 .file-list {
   @apply min-h-0 overflow-hidden;
 }
 
 .file-list header {
-  @apply h-6 px-2 text-center font-semibold leading-6;
+  @apply h-6 px-2 text-center leading-6;
   color: #000000;
 }
 
@@ -426,11 +442,6 @@ input:not([type="checkbox"]) {
 .diff-body {
   @apply min-h-0 overflow-auto;
   background: var(--editor-bg);
-}
-
-.diff-body:focus {
-  outline: 1px solid var(--selection);
-  outline-offset: -1px;
 }
 
 .classic-diff {

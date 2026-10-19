@@ -37,9 +37,29 @@ const themeLabels: Record<ThemeName, string> = {
 function setTheme(theme: ThemeName, notifyRenderer = false) {
   currentTheme = theme
   nativeTheme.themeSource = theme === 'monokai' ? 'dark' : theme
+  updateWindowControls()
   buildApplicationMenu()
   if (notifyRenderer) mainWindow?.webContents.send('app:themeSelected', theme)
 }
+
+function windowControlsOverlay() {
+  return {
+    color:
+      currentTheme === 'monokai'
+        ? '#2d2e28'
+        : nativeTheme.shouldUseDarkColors
+          ? '#272727'
+          : '#f6f6f6',
+    symbolColor: nativeTheme.shouldUseDarkColors ? '#e7e7e7' : '#171717',
+    height: 33,
+  }
+}
+
+function updateWindowControls() {
+  if (process.platform === 'win32') mainWindow?.setTitleBarOverlay(windowControlsOverlay())
+}
+
+nativeTheme.on('updated', updateWindowControls)
 
 function themeMenuItems(): MenuItemConstructorOptions[] {
   return (Object.keys(themeLabels) as ThemeName[]).map((theme) => ({
@@ -216,6 +236,11 @@ function buildApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+function showApplicationMenu() {
+  if (!mainWindow) return
+  Menu.getApplicationMenu()?.popup({ window: mainWindow, x: 8, y: 34 })
+}
+
 function repoPathsFromArgv(argv: string[]) {
   const repoPaths: string[] = []
   for (let index = 0; index < argv.length; index += 1) {
@@ -246,12 +271,14 @@ function openRepositoryPath(repoPath: string) {
 }
 
 function createWindow() {
+  const isWindows = process.platform === 'win32'
   mainWindow = new BrowserWindow({
     width: 1480,
     height: 960,
     minWidth: 980,
     minHeight: 620,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : isWindows ? 'hidden' : 'default',
+    ...(isWindows ? { titleBarOverlay: windowControlsOverlay(), autoHideMenuBar: true } : {}),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1f1f1f' : '#f5f5f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -271,6 +298,28 @@ function createWindow() {
     if (!params.isEditable) return
     editableContextMenu().popup({ window: mainWindow ?? undefined })
   })
+
+  if (isWindows) {
+    let altPressedAlone = false
+    mainWindow.on('blur', () => {
+      altPressedAlone = false
+    })
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown') {
+        altPressedAlone = input.key === 'Alt' && !input.control && !input.meta && !input.shift
+        if (input.key === 'F10' && !input.alt && !input.control && !input.meta && !input.shift) {
+          event.preventDefault()
+          showApplicationMenu()
+        }
+      } else if (input.type === 'keyUp' && input.key === 'Alt') {
+        if (altPressedAlone) {
+          event.preventDefault()
+          showApplicationMenu()
+        }
+        altPressedAlone = false
+      }
+    })
+  }
 }
 
 for (const repoPath of repoPathsFromArgv(process.argv)) {
@@ -303,6 +352,7 @@ app.on('window-all-closed', () => {
 })
 
 ipcMain.on('app:setTheme', (_event, theme: ThemeName) => setTheme(theme))
+ipcMain.on('app:showMenu', showApplicationMenu)
 
 ipcMain.handle('app:getLaunchRepositories', () => {
   const repoPaths = [...pendingRepositoryPaths]

@@ -33,6 +33,7 @@ const gitApi: GitApi = {
 }
 
 const appApi: AppApi = {
+  showMenu: () => ipcRenderer.send('app:showMenu'),
   setTheme: (theme) => ipcRenderer.send('app:setTheme', theme),
   getLaunchRepositories: () => ipcRenderer.invoke('app:getLaunchRepositories'),
   onThemeSelected: (callback) => {
