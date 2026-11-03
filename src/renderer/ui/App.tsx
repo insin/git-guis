@@ -21,6 +21,7 @@ import {
   selectedDiffText,
   withVisibleLineNumbers,
 } from '../utils/diff'
+import { fileStatusDescription } from '../utils/fileStatus'
 import { loadJson, saveJson } from '../utils/storage'
 
 type DiffMode = 'highlighted' | 'classic'
@@ -1139,12 +1140,13 @@ function RepositoryView({
   )
   const diffIsNewFile = tab.diff?.kind === 'text' && isNewFilePatch(tab.diff.patch)
   const allowPartialOperations = partialOperationsAllowed(tab)
-  const diffTitle =
-    tab.selectedPane === 'staged'
-      ? tab.amend
-        ? 'Staged for amended commit'
-        : 'Staged for commit'
-      : 'Modified, not staged'
+  const diffTitle = tab.selectedPath
+    ? fileStatusDescription(
+        tab.status?.staged.find((file) => file.path === tab.selectedPath),
+        tab.status?.unstaged.find((file) => file.path === tab.selectedPath),
+        tab.amend,
+      )
+    : ''
   const [contextMenu, setContextMenu] = useState<DiffContextMenu>(null)
 
   useEffect(() => {
