@@ -25,6 +25,7 @@ export type RepoStatus = {
   unstaged: FileChange[]
   staged: FileChange[]
   hasConflicts: boolean
+  operationMessage: { id: string; message: string } | null
   lastRefreshedAt: number
 }
 

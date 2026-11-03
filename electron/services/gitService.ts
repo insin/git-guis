@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -64,11 +65,35 @@ export class GitService {
       const staged = amend ? await this.getAmendStagedChanges(repoPath) : status.staged
       return {
         ok: true,
-        data: { ...status, root, staged },
+        data: { ...status, root, staged, operationMessage: await this.getOperationMessage(root) },
       }
     } catch (error) {
       return failure(error)
     }
+  }
+
+  private async getOperationMessage(repoPath: string): Promise<RepoStatus['operationMessage']> {
+    for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
+      const gitPath = (await this.git(repoPath, ['rev-parse', '--git-path', name])).stdout.trim()
+      const messagePath = path.resolve(repoPath, gitPath)
+      let contents: string
+      let modified: number
+      try {
+        contents = await fs.promises.readFile(messagePath, 'utf8')
+        modified = (await fs.promises.stat(messagePath)).mtimeMs
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw error
+      }
+      const message = (await this.git(repoPath, ['stripspace', '--strip-comments'], {
+        input: contents,
+      })).stdout
+      return {
+        id: createHash('sha256').update(`${name}\0${modified}\0${contents}`).digest('hex'),
+        message,
+      }
+    }
+    return null
   }
 
   async getDiff(
@@ -459,6 +484,7 @@ function parsePorcelainV2(stdout: string): RepoStatus {
     unstaged: sortChanges([...unstaged.values()]),
     staged: sortChanges([...staged.values()]),
     hasConflicts,
+    operationMessage: null,
     lastRefreshedAt: Date.now(),
   }
 }

@@ -328,6 +328,11 @@ export function App() {
           return {
             ...item,
             status: statusData,
+            commitDraft:
+              !item.amend &&
+              (item.status?.operationMessage?.id !== statusData.operationMessage?.id || !item.status)
+                ? loadCommitDraft(item.path, statusData)
+                : item.commitDraft,
             displayName: displayName(statusData.root),
             diff: selection.path ? item.diff : null,
             diffLoading: false,
@@ -703,7 +708,7 @@ export function App() {
       return
     }
 
-    saveDraft(tab.path, '')
+    saveDraft(commitDraftKey(tab.path, tab.status), '')
     setLastRevert((current) => (current?.repoPath === tab.path ? null : current))
     setTabs((current) =>
       current.map((item) =>
@@ -868,8 +873,8 @@ export function App() {
 
   const setAmend = (tab: RepoTab, amend: boolean) => {
     if (tab.amend === amend) return
-    if (amend) saveDraft(tab.path, tab.commitDraft)
-    const restoredDraft = amend ? tab.commitDraft : loadDraft(tab.path)
+    if (amend) saveDraft(commitDraftKey(tab.path, tab.status), tab.commitDraft)
+    const restoredDraft = amend ? tab.commitDraft : loadCommitDraft(tab.path, tab.status)
     setTabs((current) =>
       current.map((item) =>
         item.id === tab.id ? { ...item, amend, commitDraft: restoredDraft } : item,
@@ -897,7 +902,7 @@ export function App() {
     setTabs((current) =>
       current.map((tab) => {
         if (tab.id !== tabId) return tab
-        if (!tab.amend) saveDraft(tab.path, value)
+        if (!tab.amend) saveDraft(commitDraftKey(tab.path, tab.status), value)
         return { ...tab, commitDraft: value }
       }),
     )
@@ -2569,6 +2574,15 @@ function initialStatusSelection(status: RepoStatus): FileSelection {
 
 function displayName(repoPath: string) {
   return repoPath.split(/[\\/]/).filter(Boolean).at(-1) ?? repoPath
+}
+
+function commitDraftKey(repoPath: string, status: RepoStatus | null) {
+  return status?.operationMessage ? `${repoPath}\0${status.operationMessage.id}` : repoPath
+}
+
+function loadCommitDraft(repoPath: string, status: RepoStatus | null) {
+  const saved = loadJson<Record<string, string>>(DRAFT_KEY, {})[commitDraftKey(repoPath, status)]
+  return saved ?? status?.operationMessage?.message ?? ''
 }
 
 function loadDraft(repoPath: string) {
