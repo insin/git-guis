@@ -17,10 +17,9 @@
   --button: #dedede;
   --button-hover: #d1d1d1;
   --button-text: #1b1b1b;
-  --add-bg: #e9f8ec;
-  --add-text: #1d6f34;
+  --add-text: #00a000;
   --del-bg: #fdecec;
-  --del-text: #b42318;
+  --del-text: #ff0000;
   --hunk-bg: #fff5c2;
   --hunk-text: #5c4b00;
 }
@@ -41,10 +40,9 @@
     --button: #777777;
     --button-hover: #888888;
     --button-text: #ffffff;
-    --add-bg: #17351f;
-    --add-text: #93e790;
+    --add-text: #00a000;
     --del-bg: #3d1717;
-    --del-text: #ff8f8f;
+    --del-text: #ff0000;
     --hunk-bg: #3e3200;
     --hunk-text: #ffd400;
   }
@@ -66,32 +64,31 @@
   --button: #777777;
   --button-hover: #888888;
   --button-text: #ffffff;
-  --add-bg: #17351f;
-  --add-text: #93e790;
+  --add-text: #00a000;
   --del-bg: #3d1717;
-  --del-text: #ff8f8f;
+  --del-text: #ff0000;
   --hunk-bg: #3e3200;
   --hunk-text: #ffd400;
 }
 
 :root[data-theme="monokai"] {
+  /* Monokai Extended: https://github.com/jonschlinkert/sublime-monokai-extended/blob/master/Monokai%20Extended.tmTheme */
   --app-bg: #222222;
-  --panel-bg: #1e1f1c;
-  --panel-subtle: #2d2e28;
-  --editor-bg: #1e1f1c;
+  --panel-bg: #222222;
+  --panel-subtle: #333333;
+  --editor-bg: #222222;
   --text: #f8f8f2;
-  --muted: #c6c6bd;
-  --border: #55564d;
-  --border-strong: #75766c;
-  --selection: #49483e;
+  --muted: #bcbcbc;
+  --border: #555555;
+  --border-strong: #757575;
+  --selection: #444444;
   --unstaged: #fd971f;
   --staged: #a6e22e;
-  --add-bg: #25370d;
-  --add-text: #a6e22e;
+  --add-text: #00a000;
   --del-bg: #3a1622;
-  --del-text: #f92672;
-  --hunk-bg: #403900;
-  --hunk-text: #e6db74;
+  --del-text: #ff0000;
+  --hunk-bg: #333333;
+  --hunk-text: #3bc0f0;
 }
 
 * {
@@ -487,7 +484,6 @@ button:focus-visible,
 }
 
 .line-add {
-  background: var(--add-bg);
   color: var(--add-text);
 }
 
@@ -501,7 +497,6 @@ button:focus-visible,
 }
 
 .line-del {
-  background: var(--del-bg);
   color: var(--del-text);
 }
 
